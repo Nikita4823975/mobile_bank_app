@@ -1,14 +1,7 @@
-<<<<<<< HEAD
-name: namer_app
-description: "A new Flutter project."
-publish_to: 'none'
-version: 0.1.0
-=======
 name: mobile_bank_app
 description: "A new Flutter project."
 
 version: 1.0.0+1
->>>>>>> 8a74308 (AAAAAAAHHHHHHHHHHH)
 
 environment:
   sdk: ^3.8.0
@@ -16,13 +9,8 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-<<<<<<< HEAD
-  english_words: ^4.0.0
-  provider: ^6.1.5
-=======
   mysql1: ^0.20.0   # изменено с 0.22.0 на 0.20.0
   http: ^1.4.0       # изменено с 0.15.0 на 1.4.0
->>>>>>> 8a74308 (AAAAAAAHHHHHHHHHHH)
 
 dev_dependencies:
   flutter_test:
@@ -30,8 +18,4 @@ dev_dependencies:
   flutter_lints: ^5.0.0
 
 flutter:
-<<<<<<< HEAD
   uses-material-design: true
-=======
-  uses-material-design: true
->>>>>>> 8a74308 (AAAAAAAHHHHHHHHHHH)
