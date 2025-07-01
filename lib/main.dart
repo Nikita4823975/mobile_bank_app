@@ -1,13 +1,4 @@
 import 'package:flutter/material.dart';
-<<<<<<< HEAD
-
-void main() {
-  runApp(const MyApp());
-}
-
-class MyApp extends StatelessWidget {
-  const MyApp({Key? key}) : super(key: key);
-=======
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 
@@ -17,41 +8,16 @@ void main() {
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
->>>>>>> 8a74308 (AAAAAAAHHHHHHHHHHH)
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-<<<<<<< HEAD
-      title: 'Simple iOS App',
-      theme: ThemeData(
-        primarySwatch: Colors.blue,
-      ),
-      home: const MyHomePage(title: 'Тестовый экран'),
-=======
       title: 'Mobile Banking App Prototype',
       home: PhoneNumberListScreen(),
->>>>>>> 8a74308 (AAAAAAAHHHHHHHHHHH)
     );
   }
 }
 
-<<<<<<< HEAD
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({Key? key, required this.title}) : super(key: key);
-
-  final String title;
-
-  @override
-  State<MyHomePage> createState() => _MyHomePageState();
-}
-
-class _MyHomePageState extends State<MyHomePage> {
-  final TextEditingController _phoneController = TextEditingController();
-  final TextEditingController _passwordController = TextEditingController();
-  final TextEditingController _firstNameController = TextEditingController();
-  final TextEditingController _lastNameController = TextEditingController();
-=======
 class PhoneNumberListScreen extends StatefulWidget {
   const PhoneNumberListScreen({super.key});
 
@@ -93,55 +59,10 @@ class _PhoneNumberListScreenState extends State<PhoneNumberListScreen> {
       );
     }
   }
->>>>>>> 8a74308 (AAAAAAAHHHHHHHHHHH)
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-<<<<<<< HEAD
-      appBar: AppBar(
-        title: Text(widget.title),
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          children: <Widget>[
-            TextField(
-              controller: _phoneController,
-              decoration: const InputDecoration(labelText: 'Номер телефона'),
-              keyboardType: TextInputType.phone,
-            ),
-            TextField(
-              controller: _passwordController,
-              decoration: const InputDecoration(labelText: 'Пароль'),
-              obscureText: true,
-            ),
-            TextField(
-              controller: _firstNameController,
-              decoration: const InputDecoration(labelText: 'Имя'),
-            ),
-            TextField(
-              controller: _lastNameController,
-              decoration: const InputDecoration(labelText: 'Фамилия'),
-            ),
-            const SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: () {
-                // Здесь можно добавить логику обработки введённых данных
-                print('Номер телефона: ${_phoneController.text}');
-                print('Пароль: ${_passwordController.text}');
-                print('Имя: ${_firstNameController.text}');
-                print('Фамилия: ${_lastNameController.text}');
-              },
-              child: const Text('Отправить'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-=======
       appBar: AppBar(title: Text('Phone Numbers')),
       body: _isLoading
           ? Center(child: CircularProgressIndicator())
@@ -156,4 +77,3 @@ class _PhoneNumberListScreenState extends State<PhoneNumberListScreen> {
     );
   }
 }
->>>>>>> 8a74308 (AAAAAAAHHHHHHHHHHH)
