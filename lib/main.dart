@@ -17,20 +17,38 @@ void main() {
   );
 }
 
-// Провайдер для управления состоянием пользователя
+// Упрощенный провайдер для управления состоянием пользователя
 class UserProvider with ChangeNotifier {
   User? _currentUser;
+  bool _isLoading = false;
 
   User? get currentUser => _currentUser;
+  bool get isLoading => _isLoading;
 
-  void setUser(User user) {
+  Future<void> setUser(User user) async {
     _currentUser = user;
     notifyListeners();
   }
 
-  void clearUser() {
+  Future<void> clearUser() async {
     _currentUser = null;
     notifyListeners();
+  }
+
+  Future<void> loadUser(int userId) async {
+    _isLoading = true;
+    notifyListeners();
+    
+    try {
+      final user = await ApiService.getUser(userId);
+      _currentUser = user;
+    } catch (e) {
+      _currentUser = null;
+      rethrow;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
   }
 }
 
@@ -48,10 +66,18 @@ class AviaBankApp extends StatelessWidget {
       ),
       home: Consumer<UserProvider>(
         builder: (context, userProvider, child) {
+          // Если пользователь загружается, показываем индикатор
+          if (userProvider.isLoading) {
+            return const Scaffold(
+              body: Center(child: CircularProgressIndicator()),
+            );
+          }
+          
           // Показываем главное меню если пользователь авторизован
           if (userProvider.currentUser != null) {
             return MainMenuScreen(user: userProvider.currentUser!);
           }
+          
           // Иначе показываем экран авторизации
           return const AuthScreen();
         },

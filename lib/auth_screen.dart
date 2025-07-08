@@ -3,6 +3,7 @@ import 'api_service.dart';
 import 'models.dart';
 import 'main.dart'; // Для доступа к rootScaffoldMessengerKey
 import 'main_menu.dart';
+import 'package:provider/provider.dart';
 
 class AuthScreen extends StatefulWidget {
   const AuthScreen({super.key});
@@ -47,8 +48,11 @@ class _AuthScreenState extends State<AuthScreen> {
         _phoneController.text,
         _passwordController.text,
       );
-      final user = await _loadUserData(response['user_id'] as int);
-      await _navigateToMainMenu(user);
+      
+      // Загружаем пользователя через провайдер
+      await Provider.of<UserProvider>(context, listen: false)
+        .loadUser(response['user_id'] as int);
+        
     } catch (e) {
       _showError('Ошибка входа: ${e.toString()}');
     } finally {
@@ -56,12 +60,11 @@ class _AuthScreenState extends State<AuthScreen> {
     }
   }
 
-  // Метод регистрации
   Future<void> _register() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _isLoading = true);
     try {
-      await ApiService.register(
+      final response = await ApiService.register(
         _phoneController.text,
         _passwordController.text,
         _firstNameController.text,

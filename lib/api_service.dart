@@ -123,9 +123,9 @@ class ApiService {
         Uri.parse('$_baseUrl/user/$userId'),
         headers: {'Authorization': 'Bearer $token'},
       );
+      
       if (response.statusCode == 200) {
         final json = jsonDecode(response.body);
-        print('User JSON: $json'); // Добавьте это для отладки
         return User.fromJson(json);
       } else {
         throw Exception('Failed to load user: ${response.statusCode}');

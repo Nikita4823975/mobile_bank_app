@@ -92,57 +92,61 @@ def token_required(f):
         return f(current_user, *args, **kwargs)  # Теперь это словарь
     return decorated
 
-# Регистрация пользователя
+# Регистрация пользователя (обновлено)
 @app.route('/api/register', methods=['POST'])
 def register():
     data = request.json
-
-    # Валидация данных
-    required_fields = ['phone', 'password', 'first_name', 'last_name', 'birth_date']
+    required_fields = ['phone', 'password', 'first_name', 'last_name', 'birth_date', 'user_type']
     if not all(field in data for field in required_fields):
         return jsonify({'message': 'Не все обязательные поля заполнены'}), 400
 
-    # Проверка сложности пароля
-    if len(data['password']) < 8:
-        return jsonify({'message': 'Пароль должен содержать минимум 8 символов'}), 400
+    # Проверка типа пользователя
+    if data['user_type'] not in ['individual', 'business']:
+        return jsonify({'message': 'Некорректный тип пользователя'}), 400
 
-    # Хеширование пароля
+    # Для бизнес-аккаунтов обязательна категория
+    if data['user_type'] == 'business' and 'business_category' not in data:
+        return jsonify({'message': 'Для бизнес-аккаунта укажите категорию'}), 400
+
     hashed_password = hash_password(data['password'])
-
-    conn = None
+    conn = get_db_connection()
     try:
-        conn = get_db_connection()
         cursor = conn.cursor()
-
-        # Проверка существующего пользователя
         cursor.execute('SELECT 1 FROM users WHERE phone_number = %s', (data['phone'],))
         if cursor.fetchone():
             return jsonify({'message': 'Пользователь с таким телефоном уже существует'}), 400
 
-        # Создание пользователя
+        # Добавлены user_type и business_category
         cursor.execute(
             '''INSERT INTO users
-            (phone_number, password_hash, first_name, last_name, birth_date, role_id)
-            VALUES (%s, %s, %s, %s, %s, 1)''',
+            (phone_number, password_hash, first_name, last_name, 
+             birth_date, role_id, user_type, business_category)
+            VALUES (%s, %s, %s, %s, %s, 1, %s, %s)''',
             (data['phone'], hashed_password, data['first_name'],
-             data['last_name'], data['birth_date'])
+             data['last_name'], data['birth_date'], 
+             data['user_type'], data.get('business_category'))
         )
 
         user_id = cursor.lastrowid
-
-        # Создание счета
         account_number = f'40817810{user_id:010d}'
+        
+        # Создаем основной счет (тип 1 - Текущий)
         cursor.execute(
             'INSERT INTO accounts (account_number, user_id, type_id, balance) VALUES (%s, %s, 1, 0)',
             (account_number, user_id)
         )
+        
+        # Для бизнеса создаем дополнительный счет (тип 5 - Основной)
+        if data['user_type'] == 'business':
+            cursor.execute(
+                'INSERT INTO accounts (account_number, user_id, type_id, balance) VALUES (%s, %s, 5, 0)',
+                (f'40817820{user_id:010d}', user_id)
+            )
 
         conn.commit()
         return jsonify({'message': 'Регистрация успешна', 'user_id': user_id}), 201
-
     except Exception as e:
-        if conn:
-            conn.rollback()
+        conn.rollback()
         return jsonify({'message': str(e)}), 500
     finally:
         if conn and conn.is_connected():
@@ -190,32 +194,28 @@ def verify_token():
     except Exception as e:
         return jsonify({'valid': False, 'error': str(e)}), 401
 
-# Получение информации о пользователе
+# Получение информации о пользователе (обновлено)
 @app.route('/api/user/<int:user_id>', methods=['GET'])
 @token_required
 def get_user(current_user, user_id):
-    print(f"🔑 Current user: {current_user['user_id']}, Requested user: {user_id}")
-
     if current_user['user_id'] != user_id and current_user['role_id'] != 3:
-        print("🚫 Unauthorized access attempt")
         return jsonify({'message': 'Unauthorized access!'}), 403
 
     conn = get_db_connection()
     try:
         cursor = conn.cursor(dictionary=True)
-        cursor.execute('SELECT * FROM users WHERE user_id = %s', (user_id,))
+        cursor.execute('''
+            SELECT u.*, r.role_name 
+            FROM users u 
+            JOIN user_roles r ON u.role_id = r.role_id 
+            WHERE u.user_id = %s
+        ''', (user_id,))
         user = cursor.fetchone()
 
         if user:
             user.pop('password_hash', None)
-            print(f"✅ User data found: {user}")
             return jsonify(user), 200
-
-        print("❌ User not found")
         return jsonify({'message': 'User not found!'}), 404
-    except Exception as e:
-        print(f"🔥 Database error: {str(e)}")
-        return jsonify({'message': 'Server error'}), 500
     finally:
         if conn and conn.is_connected():
             conn.close()
@@ -269,17 +269,18 @@ def update_user(current_user, user_id):
         if conn and conn.is_connected():
             conn.close()
 
-# Получение счетов пользователя
+# Получение счетов пользователя (обновлено)
 @app.route('/api/user/<int:user_id>/accounts', methods=['GET'])
 @token_required
 def get_user_accounts(current_user, user_id):
     if current_user['user_id'] != user_id and current_user['role_id'] != 3:
         return jsonify({'message': 'Unauthorized access!'}), 403
+        
     conn = get_db_connection()
     try:
         cursor = conn.cursor(dictionary=True)
         cursor.execute('''
-            SELECT a.*, at.type_name
+            SELECT a.*, at.type_name, at.interest_rate
             FROM accounts a
             JOIN account_types at ON a.type_id = at.type_id
             WHERE a.user_id = %s AND a.is_active = 1
@@ -290,7 +291,7 @@ def get_user_accounts(current_user, user_id):
         if conn and conn.is_connected():
             conn.close()
 
-# Создание нового счета
+# Создание нового счета (обновлено)
 @app.route('/api/user/<int:user_id>/accounts', methods=['POST'])
 @token_required
 def create_account(current_user, user_id):
@@ -301,18 +302,9 @@ def create_account(current_user, user_id):
     if 'type_id' not in data:
         return jsonify({'message': 'Account type is required'}), 400
 
-    account_type = data['type_id']
-
     conn = get_db_connection()
     try:
         cursor = conn.cursor()
-
-        # Проверяем существование пользователя
-        cursor.execute('SELECT 1 FROM users WHERE user_id = %s', (user_id,))
-        if not cursor.fetchone():
-            return jsonify({'message': 'User not found'}), 404
-
-        # Генерация номера счета
         cursor.execute('SELECT MAX(account_id) AS max_id FROM accounts')
         max_id = cursor.fetchone()[0] or 0
         account_number = f'40817810{max_id + 1:010d}'
@@ -320,7 +312,7 @@ def create_account(current_user, user_id):
         cursor.execute(
             'INSERT INTO accounts (account_number, user_id, type_id, balance) '
             'VALUES (%s, %s, %s, 0)',
-            (account_number, user_id, account_type)
+            (account_number, user_id, data['type_id'])
         )
 
         account_id = cursor.lastrowid
@@ -341,7 +333,7 @@ def create_account(current_user, user_id):
         if conn and conn.is_connected():
             conn.close()
 
-# Перевод между счетами
+# Перевод между счетами (обновлено)
 @app.route('/api/transfer', methods=['POST'])
 @token_required
 def transfer(current_user):
@@ -352,17 +344,17 @@ def transfer(current_user):
 
     conn = get_db_connection()
     try:
-        cursor = conn.cursor()
+        cursor = conn.cursor(dictionary=True)
 
         # Проверяем принадлежность счета
         cursor.execute('SELECT user_id FROM accounts WHERE account_id = %s', (from_account_id,))
         account_owner = cursor.fetchone()
-        if not account_owner or account_owner[0] != current_user['user_id']:
+        if not account_owner or account_owner['user_id'] != current_user['user_id']:
             return jsonify({'message': 'Invalid account!'}), 400
 
         # Проверяем достаточность средств
         cursor.execute('SELECT balance FROM accounts WHERE account_id = %s', (from_account_id,))
-        balance = cursor.fetchone()[0]
+        balance = cursor.fetchone()['balance']
         if balance < amount:
             return jsonify({'message': 'Insufficient funds!'}), 400
 
@@ -381,16 +373,50 @@ def transfer(current_user):
             (amount, to_account_id)
         )
 
-        # Записываем транзакцию
+        # Определяем тип получателя для категории
+        cursor.execute('''
+            SELECT u.user_type, u.business_category 
+            FROM users u
+            JOIN accounts a ON a.user_id = u.user_id
+            WHERE a.account_id = %s
+        ''', (to_account_id,))
+        recipient_info = cursor.fetchone()
+        
+        category_id = 7  # По умолчанию "Переводы"
+        if recipient_info and recipient_info['user_type'] == 'business':
+            cursor.execute('''
+                SELECT category_id FROM transaction_categories
+                WHERE category_name = %s
+            ''', (recipient_info['business_category'],))
+            category = cursor.fetchone()
+            if category:
+                category_id = category['category_id']
+
+        # Записываем транзакцию (добавлены type_id и category_id)
         cursor.execute(
-            'INSERT INTO transactions (transaction_uuid, from_account_id, to_account_id, amount, type_id) '
-            'VALUES (%s, %s, %s, %s, 1)',
-            (transaction_uuid, from_account_id, to_account_id, amount)
+            '''INSERT INTO transactions 
+            (transaction_uuid, from_account_id, to_account_id, amount, 
+             type_id, category_id) 
+            VALUES (%s, %s, %s, %s, 1, %s)''',
+            (transaction_uuid, from_account_id, to_account_id, amount, category_id)
         )
+
+        # Начисление бонусов за перевод (0.5% от суммы)
+        bonus_amount = amount * 0.005
+        if bonus_amount > 0:
+            cursor.execute(
+                'UPDATE users SET bonus_balance = bonus_balance + %s WHERE user_id = %s',
+                (bonus_amount, current_user['user_id'])
+            )
+            cursor.execute(
+                '''INSERT INTO bonus_operations 
+                (user_id, amount, operation_type, description) 
+                VALUES (%s, %s, 'accrual', 'Бонус за перевод')''',
+                (current_user['user_id'], bonus_amount)
+            )
 
         conn.commit()
         return jsonify({'message': 'Transfer successful'}), 200
-
     except mysql.connector.Error as err:
         conn.rollback()
         return jsonify({'error': str(err)}), 400
@@ -412,7 +438,11 @@ def transfer_by_phone(current_user):
         cursor = conn.cursor(dictionary=True)
 
         # Проверяем принадлежность счета
-        cursor.execute('SELECT user_id FROM accounts WHERE account_id = %s', (from_account_id,))
+        cursor.execute('''
+            SELECT a.account_id FROM accounts a
+            JOIN users u ON a.user_id = u.user_id
+            WHERE u.phone_number = %s AND a.type_id = 1 AND a.is_active = 1
+        ''', (recipient_phone,))
         account_owner = cursor.fetchone()
         if not account_owner or account_owner['user_id'] != current_user['user_id']:
             return jsonify({'message': 'Invalid account!'}), 400
@@ -512,7 +542,7 @@ def transfer_by_phone(current_user):
         if conn and conn.is_connected():
             conn.close()
 
-# Получение истории транзакций
+# Получение истории транзакций (обновлено)
 @app.route('/api/user/<int:user_id>/transactions', methods=['GET'])
 @token_required
 def get_transactions(current_user, user_id):
@@ -522,11 +552,10 @@ def get_transactions(current_user, user_id):
     conn = get_db_connection()
     try:
         cursor = conn.cursor(dictionary=True)
-
         cursor.execute('''
             SELECT t.*, tt.type_name, c.category_name,
-                   a_from.account_number AS from_account,
-                   a_to.account_number AS to_account
+                   a_from.account_number AS from_account_number,
+                   a_to.account_number AS to_account_number
             FROM transactions t
             JOIN transaction_types tt ON t.type_id = tt.type_id
             LEFT JOIN transaction_categories c ON t.category_id = c.category_id
@@ -543,7 +572,8 @@ def get_transactions(current_user, user_id):
         if conn and conn.is_connected():
             conn.close()
 
-# Получение бонусного баланса
+
+# Получение бонусного баланса (новый метод)
 @app.route('/api/user/<int:user_id>/bonuses', methods=['GET'])
 @token_required
 def get_bonuses(current_user, user_id):
@@ -553,12 +583,9 @@ def get_bonuses(current_user, user_id):
     conn = get_db_connection()
     try:
         cursor = conn.cursor(dictionary=True)
-
-        # Получаем баланс
         cursor.execute('SELECT bonus_balance FROM users WHERE user_id = %s', (user_id,))
         balance = cursor.fetchone()['bonus_balance']
 
-        # Получаем историю операций
         cursor.execute('''
             SELECT * FROM bonus_operations
             WHERE user_id = %s
@@ -570,6 +597,95 @@ def get_bonuses(current_user, user_id):
             'balance': balance,
             'operations': operations
         }), 200
+    finally:
+        if conn and conn.is_connected():
+            conn.close()
+
+# Покупка авиабилета с бонусами (новый метод)
+@app.route('/api/flights/book', methods=['POST'])
+@token_required
+def book_flight(current_user):
+    data = request.json
+    ticket_id = data['ticket_id']
+    account_id = data['account_id']
+    use_bonuses = data.get('use_bonuses', False)
+
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor(dictionary=True)
+        
+        # Получаем информацию о билете
+        cursor.execute('SELECT * FROM air_tickets WHERE ticket_id = %s', (ticket_id,))
+        ticket = cursor.fetchone()
+        if not ticket or not ticket['is_available']:
+            return jsonify({'message': 'Ticket not available!'}), 400
+        
+        # Проверяем счет
+        cursor.execute('SELECT balance FROM accounts WHERE account_id = %s', (account_id,))
+        account = cursor.fetchone()
+        if not account:
+            return jsonify({'message': 'Account not found!'}), 404
+            
+        # Проверяем бонусный баланс
+        cursor.execute('SELECT bonus_balance FROM users WHERE user_id = %s', (current_user['user_id'],))
+        bonus_balance = cursor.fetchone()['bonus_balance']
+        
+        # Рассчитываем оплату
+        cash_amount = ticket['price']
+        bonus_amount = 0
+        
+        if use_bonuses:
+            max_bonus = min(ticket['price'] * 0.5, bonus_balance)
+            bonus_amount = min(max_bonus, bonus_balance)
+            cash_amount -= bonus_amount
+        
+        # Проверяем достаточно ли средств
+        if account['balance'] < cash_amount:
+            return jsonify({'message': 'Insufficient funds!'}), 400
+        
+        # Выполняем списания
+        transaction_uuid = str(uuid.uuid4())
+        
+        # Списание денег
+        cursor.execute(
+            'UPDATE accounts SET balance = balance - %s WHERE account_id = %s',
+            (cash_amount, account_id)
+        )
+        
+        # Списание бонусов
+        if bonus_amount > 0:
+            cursor.execute(
+                'UPDATE users SET bonus_balance = bonus_balance - %s WHERE user_id = %s',
+                (bonus_amount, current_user['user_id'])
+            )
+            
+            cursor.execute(
+                '''INSERT INTO bonus_operations 
+                (user_id, amount, operation_type, description) 
+                VALUES (%s, %s, 'withdrawal', 'Оплата авиабилета')''',
+                (current_user['user_id'], bonus_amount)
+            )
+        
+        # Создаем транзакцию
+        cursor.execute(
+            '''INSERT INTO transactions 
+            (transaction_uuid, from_account_id, amount, type_id, category_id, is_bonus_payment) 
+            VALUES (%s, %s, %s, 2, 9, %s)''',
+            (transaction_uuid, account_id, cash_amount, 1 if bonus_amount > 0 else 0)
+        )
+        
+        # Помечаем билет как проданный
+        cursor.execute(
+            'UPDATE air_tickets SET is_available = 0 WHERE ticket_id = %s',
+            (ticket_id,)
+        )
+        
+        conn.commit()
+        return jsonify({'message': 'Ticket purchased successfully'}), 200
+        
+    except mysql.connector.Error as err:
+        conn.rollback()
+        return jsonify({'error': str(err)}), 400
     finally:
         if conn and conn.is_connected():
             conn.close()
@@ -592,103 +708,6 @@ def get_flights():
         if conn and conn.is_connected():
             conn.close()
 
-# Покупка авиабилета с использованием бонусов
-@app.route('/api/flights/book', methods=['POST'])
-@token_required
-def book_flight(current_user):
-    data = request.json
-    ticket_id = data['ticket_id']
-    account_id = data['account_id']
-    bonus_amount = data.get('bonus_amount', 0)
-
-    conn = get_db_connection()
-    try:
-        cursor = conn.cursor(dictionary=True)
-
-        # Получаем информацию о билете
-        cursor.execute('SELECT * FROM air_tickets WHERE ticket_id = %s', (ticket_id,))
-        ticket = cursor.fetchone()
-
-        if not ticket:
-            return jsonify({'message': 'Ticket not found!'}), 404
-
-        price = ticket['price']
-        max_bonus = price * 0.5  # Максимум 50% бонусами
-
-        # Проверяем корректность суммы бонусов
-        if bonus_amount > max_bonus:
-            bonus_amount = max_bonus
-
-        # Проверяем бонусный баланс
-        cursor.execute('SELECT bonus_balance FROM users WHERE user_id = %s', (current_user['user_id'],))
-        user_bonus = cursor.fetchone()['bonus_balance']
-
-        if bonus_amount > user_bonus:
-            return jsonify({'message': 'Insufficient bonus funds!'}), 400
-
-        # Проверяем денежный баланс
-        cash_amount = price - bonus_amount
-        cursor.execute('SELECT balance FROM accounts WHERE account_id = %s', (account_id,))
-        account_balance = cursor.fetchone()['balance']
-
-        if account_balance < cash_amount:
-            return jsonify({'message': 'Insufficient funds!'}), 400
-
-        # Выполняем платежи
-        transaction_uuid = str(uuid.uuid4())
-
-        # Списание денежных средств
-        if cash_amount > 0:
-            cursor.execute(
-                'UPDATE accounts SET balance = balance - %s WHERE account_id = %s',
-                (cash_amount, account_id)
-            )
-
-            # Записываем денежную транзакцию
-            cursor.execute(
-                'INSERT INTO transactions (transaction_uuid, from_account_id, amount, '
-                'type_id, category_id, is_bonus_payment) '
-                'VALUES (%s, %s, %s, 2, 9, 0)',
-                (transaction_uuid, account_id, cash_amount)
-            )
-
-        # Списание бонусов
-        if bonus_amount > 0:
-            cursor.execute(
-                'UPDATE users SET bonus_balance = bonus_balance - %s WHERE user_id = %s',
-                (bonus_amount, current_user['user_id'])
-            )
-
-            # Записываем бонусную операцию
-            cursor.execute(
-                'INSERT INTO bonus_operations (user_id, amount, operation_type, description) '
-                'VALUES (%s, %s, "withdrawal", "Оплата авиабилета")',
-                (current_user['user_id'], -bonus_amount)
-            )
-
-            # Записываем бонусную транзакцию
-            cursor.execute(
-                'INSERT INTO transactions (transaction_uuid, amount, '
-                'type_id, category_id, is_bonus_payment) '
-                'VALUES (%s, %s, 2, 9, 1)',
-                (transaction_uuid, bonus_amount)
-            )
-
-        # Помечаем билет как купленный
-        cursor.execute(
-            'UPDATE air_tickets SET is_available = 0 WHERE ticket_id = %s',
-            (ticket_id,)
-        )
-
-        conn.commit()
-        return jsonify({'message': 'Ticket purchased successfully'}), 200
-
-    except mysql.connector.Error as err:
-        conn.rollback()
-        return jsonify({'error': str(err)}), 400
-    finally:
-        if conn and conn.is_connected():
-            conn.close()
 
 # Создание тикета в поддержку
 @app.route('/api/support/tickets', methods=['POST'])
