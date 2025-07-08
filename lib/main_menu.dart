@@ -1,13 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:mobile_bank_app/main.dart';
 import 'api_service.dart';
 import 'models.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 
 // Главное меню
 class MainMenuScreen extends StatefulWidget {
-  final User? user; // Добавляем поле для пользователя
+  final User user;
 
-  const MainMenuScreen({super.key, this.user}); // Обновляем конструктор
+  const MainMenuScreen({super.key, required this.user});
 
   @override
   State<MainMenuScreen> createState() => _MainMenuScreenState();
@@ -15,62 +17,27 @@ class MainMenuScreen extends StatefulWidget {
 
 class _MainMenuScreenState extends State<MainMenuScreen> {
   Future<User>? _userFuture;
-  int? _userId;
   bool _isLoading = true;
-  User? user; // Добавляем поле для хранения пользователя
+  late User user; // Используем переданный параметр user
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    user = widget.user; // Инициализируем user из параметра
     _loadUserData();
   }
 
   void _loadUserData() {
-    final user = ModalRoute.of(context)?.settings.arguments;
-    if (user is User) {
-      setState(() {
-        _userId = user.userId;
-        this.user = user; // Сохраняем объект пользователя
-        _userFuture = Future.value(user); // Используем готовые данные
-        _isLoading = false;
-      });
-    } else if (user is int) { // Для обратной совместимости
-      setState(() {
-        _userId = user;
-        _userFuture = _fetchUserData();
-      });
-    } else {
-      setState(() => _isLoading = false);
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Ошибка: Данные пользователя не получены')),
-        );
-        // Возврат на экран авторизации, если данные не получены
-        Navigator.pushReplacementNamed(context, '/');
-      });
-    }
-  }
-
-
-  Future<User> _fetchUserData() async {
-    try {
-      final user = await ApiService.getUser(_userId!);
-      setState(() {
-        _isLoading = false;
-        this.user = user; // Сохраняем пользователя
-      });
-      return user;
-    } catch (e) {
-      setState(() => _isLoading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Ошибка загрузки данных: $e')),
-      );
-      rethrow;
-    }
+    setState(() {
+      _userFuture = Future.value(user);
+      _isLoading = false;
+    });
   }
 
   @override
   Widget build(BuildContext context) {
+    User user; // Объявляем переменную user
+
     return Scaffold(
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
@@ -84,7 +51,7 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
                 } else if (!snapshot.hasData) {
                   return const Center(child: Text('Данные не найдены'));
                 }
-                final user = snapshot.data!;
+                user = snapshot.data!; // Инициализируем переменную user
                 return Column(
                   children: [
                     Container(
@@ -211,28 +178,25 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
         borderRadius: BorderRadius.circular(15),
         onTap: () {
           if (route.isNotEmpty) {
-            final state = context.findAncestorStateOfType<_MainMenuScreenState>();
-            if (state != null && state.user != null) {
-              switch (route) {
-                case '/accounts':
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => AccountsScreen(user: state.user!),
-                    ),
-                  );
-                  break;
-                case '/profile':
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => ProfileScreen(user: state.user!),
-                    ),
-                  );
-                  break;
-                default:
-                  Navigator.pushNamed(context, route);
-              }
+            switch (route) {
+              case '/accounts':
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const AccountsScreen(),
+                  ),
+                );
+                break;
+              case '/profile':
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => ProfileScreen(user: user),
+                  ),
+                );
+                break;
+              default:
+                Navigator.pushNamed(context, route);
             }
           }
         },
@@ -407,9 +371,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
 // Счета и вклады
 class AccountsScreen extends StatefulWidget {
-  final User user;
-
-  const AccountsScreen({super.key, required this.user});
+  const AccountsScreen({super.key});
 
   @override
   State<AccountsScreen> createState() => _AccountsScreenState();
@@ -422,15 +384,16 @@ class _AccountsScreenState extends State<AccountsScreen> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _loadAccounts(); // Вызываем существующий метод _loadAccounts()
-    });
+    _loadAccounts();
   }
 
   Future<void> _loadAccounts() async {
+    final user = Provider.of<UserProvider>(context, listen: false).currentUser;
+    if (user == null) return;
+
     setState(() => _isLoading = true);
     try {
-      final accounts = await ApiService.getUserAccounts(widget.user.userId);
+      final accounts = await ApiService.getUserAccounts(user.userId);
       setState(() => _accountsFuture = Future.value(accounts));
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -446,7 +409,9 @@ class _AccountsScreenState extends State<AccountsScreen> {
       setState(() {
         _isLoading = true;
       });
-      await ApiService.createAccount(widget.user.userId, accountType);
+      final userProvider = Provider.of<UserProvider>(context, listen: false);
+      final user = userProvider.currentUser!;
+      await ApiService.createAccount(user.userId, accountType);
       await _loadAccounts();
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Счет успешно создан')),
@@ -461,6 +426,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
       });
     }
   }
+
 
   void _showCreateAccountDialog() {
     int selectedType = 1;
@@ -680,7 +646,7 @@ class _AccountDetailsScreenState extends State<AccountDetailsScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Введите корректную сумму')),
       );
-      return;
+            return;
     }
     try {
       setState(() {
@@ -913,19 +879,15 @@ class _MoneyTransferScreenState extends State<MoneyTransferScreen> {
   final _phoneController = TextEditingController();
   Future<List<Account>> _accountsFuture = Future.value([]);
   int? _selectedAccountId;
-  int? _userId;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final user = ModalRoute.of(context)?.settings.arguments as User?;
+    final user = Provider.of<UserProvider>(context, listen: false).currentUser;
     if (user != null) {
-      _userId = user.userId;
-      if (_userId != null) {
-        _accountsFuture = ApiService.getUserAccounts(_userId!);
-      } else {
-        _accountsFuture = Future.value([]);
-      }
+      _accountsFuture = ApiService.getUserAccounts(user.userId);
+    } else {
+      _accountsFuture = Future.value([]);
     }
   }
 
@@ -985,7 +947,7 @@ class _MoneyTransferScreenState extends State<MoneyTransferScreen> {
                   return const CircularProgressIndicator();
                 } else if (snapshot.hasError) {
                   return Text('Ошибка: ${snapshot.error}');
-                } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                }                 else if (!snapshot.hasData || snapshot.data!.isEmpty) {
                   return const Text('Счета не найдены');
                 }
 
@@ -1090,7 +1052,7 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final user = ModalRoute.of(context)?.settings.arguments as User?;
+    final user = Provider.of<UserProvider>(context, listen: false).currentUser;
     if (user != null) {
       _userId = user.userId;
       if (_userId != null) {
@@ -1196,7 +1158,7 @@ class _CashbackScreenState extends State<CashbackScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final user = ModalRoute.of(context)?.settings.arguments as User?;
+    final user = Provider.of<UserProvider>(context, listen: false).currentUser;
     if (user != null) {
       _userId = user.userId;
       _userFuture = Future.value(user);
@@ -1291,7 +1253,7 @@ class _CustomerSupportScreenState extends State<CustomerSupportScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final user = ModalRoute.of(context)?.settings.arguments as User?;
+    final user = Provider.of<UserProvider>(context, listen: false).currentUser;
     if (user != null) {
       _userId = user.userId;
       if (_userId != null) {
@@ -1439,7 +1401,7 @@ class _FlightsScreenState extends State<FlightsScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final user = ModalRoute.of(context)?.settings.arguments as User?;
+    final user = Provider.of<UserProvider>(context, listen: false).currentUser;
     if (user != null) {
       _userId = user.userId;
       _flightsFuture = ApiService.getFlights();
@@ -1581,8 +1543,7 @@ class _FlightBookingScreenState extends State<FlightBookingScreen> {
       _bonusController.text = (_ticket.price * 0.5).toStringAsFixed(2);
       _bonusAmount = _ticket.price * 0.5;
     } else {
-      _bonusAmount = bonus;
-    }
+      _bonusAmount = bonus;     }
     _cashAmount = _ticket.price - _bonusAmount;
     setState(() {});
   }
@@ -1715,7 +1676,7 @@ class _InternalTransferScreenState extends State<InternalTransferScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final user = ModalRoute.of(context)?.settings.arguments as User?;
+    final user = Provider.of<UserProvider>(context, listen: false).currentUser;
     if (user != null) {
       _userId = user.userId;
       if (_userId != null) {
@@ -1892,7 +1853,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final user = ModalRoute.of(context)?.settings.arguments as User?;
+    final user = Provider.of<UserProvider>(context, listen: false).currentUser;
     if (user != null) {
       _userId = user.userId;
       if (_userId != null) {
@@ -1997,7 +1958,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final user = ModalRoute.of(context)?.settings.arguments as User?;
+    final user = Provider.of<UserProvider>(context, listen: false).currentUser;
     if (user != null) {
       _userId = user.userId;
     }
@@ -2110,7 +2071,7 @@ class _EditNameScreenState extends State<EditNameScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final user = ModalRoute.of(context)?.settings.arguments as User?;
+    final user = Provider.of<UserProvider>(context, listen: false).currentUser;
     if (user != null) {
       _userId = user.userId;
       _firstNameController.text = user.firstName;
@@ -2206,7 +2167,7 @@ class _EditPhoneScreenState extends State<EditPhoneScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final user = ModalRoute.of(context)?.settings.arguments as User?;
+    final user = Provider.of<UserProvider>(context, listen: false).currentUser;
     if (user != null) {
       _userId = user.userId;
       _phoneController.text = user.phoneNumber;
@@ -2271,3 +2232,4 @@ class _EditPhoneScreenState extends State<EditPhoneScreen> {
     super.dispose();
   }
 }
+
