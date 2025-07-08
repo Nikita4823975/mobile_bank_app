@@ -1,5 +1,3 @@
-// models.dart
-
 class User {
   final int userId;
   final String phoneNumber;
@@ -7,7 +5,7 @@ class User {
   final String lastName;
   final DateTime? birthDate;
   final String userType;
-  final String? businessCategory;
+  final int? historyType;
   final double bonusBalance;
   final int roleId;
 
@@ -18,7 +16,7 @@ class User {
     required this.lastName,
     this.birthDate,
     required this.userType,
-    this.businessCategory,
+    this.historyType,
     required this.bonusBalance,
     required this.roleId,
   });
@@ -29,27 +27,27 @@ class User {
       phoneNumber: json['phone_number'] as String? ?? '',
       firstName: json['first_name'] as String? ?? '',
       lastName: json['last_name'] as String? ?? '',
-      birthDate: json['birth_date'] != null 
-          ? DateTime.tryParse(json['birth_date'].toString().replaceFirst(' GMT', '')) 
+      birthDate: json['birth_date'] != null
+          ? DateTime.tryParse(json['birth_date'].toString().replaceFirst(' GMT', ''))
           : null,
       userType: json['user_type'] as String? ?? 'individual',
-      businessCategory: json['business_category'] as String?,
+      historyType: json['history_type'] as int?,
       bonusBalance: double.tryParse(json['bonus_balance']?.toString() ?? '0') ?? 0.0,
       roleId: json['role_id'] as int? ?? 1,
     );
   }
 
   Map<String, dynamic> toJson() => {
-    'user_id': userId,
-    'phone_number': phoneNumber,
-    'first_name': firstName,
-    'last_name': lastName,
-    'birth_date': birthDate?.toIso8601String(),
-    'user_type': userType,
-    'business_category': businessCategory,
-    'bonus_balance': bonusBalance,
-    'role_id': roleId,
-  };
+        'user_id': userId,
+        'phone_number': phoneNumber,
+        'first_name': firstName,
+        'last_name': lastName,
+        'birth_date': birthDate?.toIso8601String(),
+        'user_type': userType,
+        'history_type': historyType,
+        'bonus_balance': bonusBalance,
+        'role_id': roleId,
+      };
 }
 
 class Account {
@@ -57,37 +55,32 @@ class Account {
   final String accountNumber;
   final int userId;
   final int typeId;
-  final String currency;
   final double balance;
   final DateTime openingDate;
   final bool isActive;
-  final String typeName;
+  final String? typeName;
 
   Account({
     required this.accountId,
     required this.accountNumber,
     required this.userId,
     required this.typeId,
-    required this.currency,
     required this.balance,
     required this.openingDate,
     required this.isActive,
-    required this.typeName,
+    this.typeName,
   });
 
   factory Account.fromJson(Map<String, dynamic> json) {
     return Account(
-      accountId: json['account_id'],
-      accountNumber: json['account_number'],
-      userId: json['user_id'],
-      typeId: json['type_id'],
-      currency: json['currency'],
-      balance: (json['balance'] is num)
-    ? (json['balance'] as num).toDouble()
-    : double.tryParse(json['balance']?.toString() ?? '') ?? 0.0,
-      openingDate: DateTime.parse(json['opening_date']),
-      isActive: json['is_active'] == 1,
-      typeName: json['type_name'],
+      accountId: json['account_id'] as int,
+      accountNumber: json['account_number'] as String,
+      userId: json['user_id'] as int,
+      typeId: json['type_id'] as int,
+      balance: (json['balance'] is num) ? (json['balance'] as num).toDouble() : 0.0,
+      openingDate: DateTime.parse(json['opening_date'] as String),
+      isActive: (json['is_active'] == 1),
+      typeName: json['type_name'] as String?,
     );
   }
 }
@@ -98,16 +91,15 @@ class Transaction {
   final int? fromAccountId;
   final int? toAccountId;
   final double amount;
-  final String currency;
   final DateTime transactionDate;
   final int typeId;
-  final String status;
+  final String? status;
   final String? recipientPhone;
   final int? categoryId;
   final String? categoryName;
   final String? fromAccount;
   final String? toAccount;
-  final String typeName;
+  final String? typeName;
   final bool isBonusPayment;
 
   Transaction({
@@ -116,39 +108,35 @@ class Transaction {
     this.fromAccountId,
     this.toAccountId,
     required this.amount,
-    required this.currency,
     required this.transactionDate,
     required this.typeId,
-    required this.status,
+    this.status,
     this.recipientPhone,
     this.categoryId,
     this.categoryName,
     this.fromAccount,
     this.toAccount,
-    required this.typeName,
-    required this.isBonusPayment,
+    this.typeName,
+    this.isBonusPayment = false,
   });
 
   factory Transaction.fromJson(Map<String, dynamic> json) {
     return Transaction(
-      transactionId: json['transaction_id'],
-      transactionUuid: json['transaction_uuid'],
-      fromAccountId: json['from_account_id'],
-      toAccountId: json['to_account_id'],
-      amount: (json['amount'] is num)
-    ? (json['amount'] as num).toDouble()
-    : double.tryParse(json['amount']?.toString() ?? '') ?? 0.0,
-      currency: json['currency'],
-      transactionDate: DateTime.parse(json['transaction_date']),
-      typeId: json['type_id'],
-      status: json['status'],
-      recipientPhone: json['recipient_phone'],
-      categoryId: json['category_id'],
-      categoryName: json['category_name'],
-      fromAccount: json['from_account'],
-      toAccount: json['to_account'],
-      typeName: json['type_name'],
-      isBonusPayment: json['is_bonus_payment'] == 1,
+      transactionId: json['transaction_id'] as int,
+      transactionUuid: json['transaction_uuid'] as String,
+      fromAccountId: json['from_account_id'] as int?,
+      toAccountId: json['to_account_id'] as int?,
+      amount: (json['amount'] is num) ? (json['amount'] as num).toDouble() : 0.0,
+      transactionDate: DateTime.parse(json['transaction_date'] as String),
+      typeId: json['type_id'] as int,
+      status: json['status'] as String?,
+      recipientPhone: json['recipient_phone'] as String?,
+      categoryId: json['category_id'] as int?,
+      categoryName: json['category_name'] as String?,
+      fromAccount: json['from_account'] as String?,
+      toAccount: json['to_account'] as String?,
+      typeName: json['type_name'] as String?,
+      isBonusPayment: (json['is_bonus_payment'] == 1),
     );
   }
 }
@@ -160,7 +148,7 @@ class AirTicket {
   final DateTime departureTime;
   final DateTime arrivalTime;
   final double price;
-  final String airline;
+  final String? airline;
   final bool isAvailable;
 
   AirTicket({
@@ -170,20 +158,20 @@ class AirTicket {
     required this.departureTime,
     required this.arrivalTime,
     required this.price,
-    required this.airline,
+    this.airline,
     required this.isAvailable,
   });
 
   factory AirTicket.fromJson(Map<String, dynamic> json) {
     return AirTicket(
-      ticketId: json['ticket_id'],
-      departureCity: json['departure_city'],
-      arrivalCity: json['arrival_city'],
-      departureTime: DateTime.parse(json['departure_time']),
-      arrivalTime: DateTime.parse(json['arrival_time']),
-      price: json['price']?.toDouble() ?? 0.0,
-      airline: json['airline'],
-      isAvailable: json['is_available'] == 1,
+      ticketId: json['ticket_id'] as int,
+      departureCity: json['departure_city'] as String,
+      arrivalCity: json['arrival_city'] as String,
+      departureTime: DateTime.parse(json['departure_time'] as String),
+      arrivalTime: DateTime.parse(json['arrival_time'] as String),
+      price: (json['price'] as num).toDouble(),
+      airline: json['airline'] as String?,
+      isAvailable: (json['is_available'] == 1),
     );
   }
 }
@@ -219,18 +207,18 @@ class SupportTicket {
 
   factory SupportTicket.fromJson(Map<String, dynamic> json) {
     return SupportTicket(
-      ticketId: json['ticket_id'],
-      userId: json['user_id'],
-      employeeId: json['employee_id'],
-      subject: json['subject'],
-      messageText: json['message_text'],
-      replyText: json['reply_text'],
-      isRead: json['is_read'] == 1,
-      isAnswered: json['is_answered'] == 1,
-      createdAt: DateTime.parse(json['created_at']),
-      updatedAt: DateTime.parse(json['updated_at']),
-      firstName: json['first_name'],
-      lastName: json['last_name'],
+      ticketId: json['ticket_id'] as int,
+      userId: json['user_id'] as int,
+      employeeId: json['employee_id'] as int?,
+      subject: json['subject'] as String,
+      messageText: json['message_text'] as String,
+      replyText: json['reply_text'] as String?,
+      isRead: (json['is_read'] == 1),
+      isAnswered: (json['is_answered'] == 1),
+      createdAt: DateTime.parse(json['created_at'] as String),
+      updatedAt: DateTime.parse(json['updated_at'] as String),
+      firstName: json['first_name'] as String?,
+      lastName: json['last_name'] as String?,
     );
   }
 }

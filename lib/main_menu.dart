@@ -245,9 +245,9 @@ class ProfileScreen extends StatelessWidget {
             const SizedBox(height: 8),
             Text('Тип: ${user.userType == 'individual' ? 'Физ. лицо' : 'Юр. лицо'}',
                 style: const TextStyle(fontSize: 18)),
-            if (user.businessCategory != null) ...[
+            if (user.historyType != null) ...[
               const SizedBox(height: 8),
-              Text('Категория: ${user.businessCategory}',
+              Text('Категория: ${user.historyType}',
                   style: const TextStyle(fontSize: 18)),
             ],
             const SizedBox(height: 24),
@@ -379,28 +379,36 @@ class AccountsScreen extends StatefulWidget {
 
 class _AccountsScreenState extends State<AccountsScreen> {
   Future<List<Account>> _accountsFuture = Future.value([]);
-  bool _isLoading = false;
+  bool _isLoading = true;
+  int? _userId;
 
   @override
-  void initState() {
-    super.initState();
-    _loadAccounts();
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final userProvider = Provider.of<UserProvider>(context, listen: false);
+    if (userProvider.currentUser != null) {
+      _userId = userProvider.currentUser!.userId;
+      _loadAccounts();
+    } else {
+      setState(() {
+        _isLoading = false;
+      });
+    }
   }
 
   Future<void> _loadAccounts() async {
-    final user = Provider.of<UserProvider>(context, listen: false).currentUser;
-    if (user == null) return;
-
-    setState(() => _isLoading = true);
     try {
-      final accounts = await ApiService.getUserAccounts(user.userId);
-      setState(() => _accountsFuture = Future.value(accounts));
+      _accountsFuture = ApiService.getUserAccounts(_userId!);
+      setState(() {
+        _isLoading = false;
+      });
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Ошибка загрузки счетов: $e')),
       );
-    } finally {
-      setState(() => _isLoading = false);
+      setState(() {
+        _isLoading = false;
+      });
     }
   }
 
@@ -409,9 +417,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
       setState(() {
         _isLoading = true;
       });
-      final userProvider = Provider.of<UserProvider>(context, listen: false);
-      final user = userProvider.currentUser!;
-      await ApiService.createAccount(user.userId, accountType);
+      await ApiService.createAccount(_userId!, accountType);
       await _loadAccounts();
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Счет успешно создан')),
@@ -427,135 +433,6 @@ class _AccountsScreenState extends State<AccountsScreen> {
     }
   }
 
-
-  void _showCreateAccountDialog() {
-    int selectedType = 1;
-    showDialog(
-      context: context,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setState) {
-            return AlertDialog(
-              title: const Text('Открыть новый счет'),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text('Выберите тип счета:'),
-                  const SizedBox(height: 10),
-                  DropdownButtonFormField<int>(
-                    value: selectedType,
-                    decoration: InputDecoration(
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                    ),
-                    items: const [
-                      DropdownMenuItem(
-                        value: 1,
-                        child: Text('Текущий счет (Рубли)'),
-                      ),
-                      DropdownMenuItem(
-                        value: 2,
-                        child: Text('Сберегательный счет (Рубли)'),
-                      ),
-                      DropdownMenuItem(
-                        value: 3,
-                        child: Text('Депозит (Рубли)'),
-                      ),
-                    ],
-                    onChanged: (value) {
-                      setState(() => selectedType = value!);
-                    },
-                  ),
-                ],
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('Отмена'),
-                ),
-                ElevatedButton(
-                  onPressed: () async {
-                    Navigator.pop(context);
-                    await _createNewAccount(selectedType);
-                  },
-                  child: const Text('Создать'),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-  }
-
-  Widget _buildAccountCard(Account account) {
-    return Card(
-      elevation: 4,
-      margin: const EdgeInsets.only(bottom: 16),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(15),
-      ),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(15),
-        onTap: () {
-          Navigator.pushNamed(
-            context,
-            '/account-details',
-            arguments: account,
-          );
-        },
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    account.typeName,
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  Chip(
-                    label: Text(
-                      account.isActive ? 'Активен' : 'Неактивен',
-                      style: const TextStyle(color: Colors.white),
-                    ),
-                    backgroundColor: account.isActive
-                        ? Colors.green
-                        : Colors.grey,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              Text(
-                'Номер: •••• ${account.accountNumber.substring(account.accountNumber.length - 4)}',
-                style: const TextStyle(color: Colors.grey),
-              ),
-              const SizedBox(height: 10),
-              Text(
-                '${account.balance.toStringAsFixed(2)} ${account.currency}',
-                style: const TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 10),
-              Text(
-                'Открыт: ${DateFormat('dd.MM.yyyy').format(account.openingDate)}',
-                style: const TextStyle(color: Colors.grey),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -564,8 +441,27 @@ class _AccountsScreenState extends State<AccountsScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.add),
-            onPressed: _showCreateAccountDialog,
-            tooltip: 'Добавить счет',
+            onPressed: () {
+              showDialog(
+                context: context,
+                builder: (context) => AlertDialog(
+                  title: const Text('Создать новый счет'),
+                  content: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      ElevatedButton(
+                        onPressed: () => _createNewAccount(1),
+                        child: const Text('Создать счет'),
+                      ),
+                      ElevatedButton(
+                        onPressed: () => _createNewAccount(2),
+                        child: const Text('Создать вклад'),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
           ),
         ],
       ),
@@ -579,36 +475,31 @@ class _AccountsScreenState extends State<AccountsScreen> {
                 } else if (snapshot.hasError) {
                   return Center(child: Text('Ошибка: ${snapshot.error}'));
                 } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                  return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Text('У вас пока нет счетов'),
-                        const SizedBox(height: 20),
-                        ElevatedButton(
-                          onPressed: _showCreateAccountDialog,
-                          child: const Text('Открыть первый счет'),
-                        ),
-                      ],
-                    ),
-                  );
+                  return const Center(child: Text('Счета не найдены'));
                 }
+
                 final accounts = snapshot.data!;
-                return RefreshIndicator(
-                  onRefresh: _loadAccounts,
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      children: [
-                        ...accounts.map(_buildAccountCard),
-                        const SizedBox(height: 20),
-                        ElevatedButton(
-                          onPressed: _showCreateAccountDialog,
-                          child: const Text('Открыть новый счет'),
-                        ),
-                      ],
-                    ),
-                  ),
+                return ListView.builder(
+                  itemCount: accounts.length,
+                  itemBuilder: (context, index) {
+                    final account = accounts[index];
+                    return ListTile(
+                      title: Text(account.typeName ?? 'Неизвестный тип'),
+                      subtitle: Text(
+                        account.accountNumber != null && account.accountNumber.length >= 4
+                          ? '••••${account.accountNumber.substring(account.accountNumber.length - 4)}'
+                          : 'Номер счета неизвестен',
+                      ),
+                      trailing: Text('${account.balance.toStringAsFixed(2)}'),
+                      onTap: () {
+                        Navigator.pushNamed(
+                          context,
+                          '/account-details',
+                          arguments: account,
+                        );
+                      },
+                    );
+                  },
                 );
               },
             ),
@@ -659,7 +550,6 @@ class _AccountDetailsScreenState extends State<AccountDetailsScreen> {
           accountNumber: _account!.accountNumber,
           userId: _account!.userId,
           typeId: _account!.typeId,
-          currency: _account!.currency,
           balance: _account!.balance + amount,
           openingDate: _account!.openingDate,
           isActive: _account!.isActive,
@@ -735,7 +625,7 @@ class _AccountDetailsScreenState extends State<AccountDetailsScreen> {
     }
     return Scaffold(
       appBar: AppBar(
-        title: Text(_account!.typeName),
+        title: Text(_account!.typeName ?? 'Неизвестный тип'),
         actions: [
           if (_account!.isActive)
             IconButton(
@@ -767,7 +657,7 @@ class _AccountDetailsScreenState extends State<AccountDetailsScreen> {
                             ),
                           ),
                           Text(
-                            '${_account!.balance.toStringAsFixed(2)} ${_account!.currency}',
+                            '${_account!.balance.toStringAsFixed(2)}',
                             style: const TextStyle(
                               fontSize: 28,
                               fontWeight: FontWeight.bold,
@@ -1124,12 +1014,14 @@ class TransactionCard extends StatelessWidget {
             color: transaction.amount > 0 ? Colors.green : Colors.red,
           ),
         ),
-        title: Text(transaction.typeName),
+        title: Text(transaction.typeName ?? 'Неизвестованный тип'),
         subtitle: Text(
-          '${transaction.transactionDate.day}.${transaction.transactionDate.month}.${transaction.transactionDate.year} - ${transaction.categoryName ?? ''}',
+          transaction.transactionDate != null
+            ? '${transaction.transactionDate.day}.${transaction.transactionDate.month}.${transaction.transactionDate.year}'
+            : 'Неизвестная дата',
         ),
         trailing: Text(
-          '${transaction.amount > 0 ? '+' : ''}${transaction.amount.toStringAsFixed(2)}${transaction.isBonusPayment ? ' бонусов' : ' ${transaction.currency}'}',
+          '${transaction.amount > 0 ? '+' : ''}${transaction.amount.toStringAsFixed(2)}${transaction.isBonusPayment ? ' бонусов' : ''}', // убрал currency
           style: TextStyle(
             color: transaction.amount > 0 ? Colors.green : Colors.red,
             fontWeight: FontWeight.bold,
@@ -1352,6 +1244,8 @@ class SupportTicketCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final dateFormat = DateFormat('dd.MM.yyyy');
+
     return Card(
       margin: const EdgeInsets.only(bottom: 16),
       child: Padding(
@@ -1375,7 +1269,9 @@ class SupportTicketCard extends StatelessWidget {
             ],
             const SizedBox(height: 8),
             Text(
-              '${ticket.createdAt.day}.${ticket.createdAt.month}.${ticket.createdAt.year}',
+              ticket.createdAt != null
+                  ? dateFormat.format(ticket.createdAt!)
+                  : 'Неизвестная дата',
               style: TextStyle(color: Colors.grey[600]),
             ),
           ],
@@ -1384,6 +1280,7 @@ class SupportTicketCard extends StatelessWidget {
     );
   }
 }
+
 
 // Авиабилеты
 class FlightsScreen extends StatefulWidget {
@@ -1455,6 +1352,9 @@ class FlightCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final dateFormat = DateFormat('dd.MM.yyyy');
+    final timeFormat = DateFormat('HH:mm');
+
     return Card(
       margin: const EdgeInsets.only(bottom: 16),
       child: InkWell(
@@ -1482,12 +1382,12 @@ class FlightCard extends StatelessWidget {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text('Вылет: ${_formatTime(ticket.departureTime)}'),
-                  Text('Прилет: ${_formatTime(ticket.arrivalTime)}'),
+                  Text('Вылет: ${ticket.departureTime != null ? timeFormat.format(ticket.departureTime!) : 'Неизвестное время'}'),
+                  Text('Прилет: ${ticket.arrivalTime != null ? timeFormat.format(ticket.arrivalTime!) : 'Неизвестное время'}'),
                 ],
               ),
               const SizedBox(height: 8),
-              Text('Авиакомпания: ${ticket.airline}'),
+              Text('Авиакомпания: ${ticket.airline ?? 'Неизвестная авиакомпания'}'),
               const SizedBox(height: 8),
               Text(
                 'Цена: ${ticket.price.toStringAsFixed(2)} руб.',
@@ -1499,11 +1399,8 @@ class FlightCard extends StatelessWidget {
       ),
     );
   }
-
-  String _formatTime(DateTime time) {
-    return '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
-  }
 }
+
 
 class FlightBookingScreen extends StatefulWidget {
   const FlightBookingScreen({super.key});
@@ -1543,7 +1440,8 @@ class _FlightBookingScreenState extends State<FlightBookingScreen> {
       _bonusController.text = (_ticket.price * 0.5).toStringAsFixed(2);
       _bonusAmount = _ticket.price * 0.5;
     } else {
-      _bonusAmount = bonus;     }
+      _bonusAmount = bonus;
+    }
     _cashAmount = _ticket.price - _bonusAmount;
     setState(() {});
   }
@@ -1575,6 +1473,9 @@ class _FlightBookingScreenState extends State<FlightBookingScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final dateFormat = DateFormat('dd.MM.yyyy');
+    final timeFormat = DateFormat('HH:mm');
+
     return Scaffold(
       appBar: AppBar(title: const Text('Оформление билета')),
       body: Padding(
@@ -1587,9 +1488,9 @@ class _FlightBookingScreenState extends State<FlightBookingScreen> {
               style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 10),
-            Text('Вылет: ${_formatDate(_ticket.departureTime)}'),
-            Text('Прилет: ${_formatDate(_ticket.arrivalTime)}'),
-            Text('Авиакомпания: ${_ticket.airline}'),
+            Text('Вылет: ${_ticket.departureTime != null ? dateFormat.format(_ticket.departureTime!) : 'Неизвестная дата'}'),
+            Text('Прилет: ${_ticket.arrivalTime != null ? dateFormat.format(_ticket.arrivalTime!) : 'Неизвестная дата'}'),
+            Text('Авиакомпания: ${_ticket.airline ?? 'Неизвестная авиакомпания'}'),
             const SizedBox(height: 20),
             const Text(
               'Оплата бонусами',
@@ -1625,9 +1526,11 @@ class _FlightBookingScreenState extends State<FlightBookingScreen> {
                   items: snapshot.data?.map((account) {
                     return DropdownMenuItem<int>(
                       value: account.accountId,
-                      child: Text('${account.typeName} (${account.balance.toStringAsFixed(2)} ${account.currency})'),
+                      child: Text(
+                        '${account.typeName ?? 'Неизвестный тип'} (${account.balance.toStringAsFixed(2)})',
+                      ),
                     );
-                  }).toList(),
+                  }).toList() ?? [],
                   onChanged: (value) => setState(() => _selectedAccountId = value),
                 );
               },
@@ -1647,8 +1550,20 @@ class _FlightBookingScreenState extends State<FlightBookingScreen> {
     );
   }
 
-  String _formatDate(DateTime date) {
-    return '${date.day}.${date.month}.${date.year} ${date.hour}:${date.minute.toString().padLeft(2, '0')}';
+  String _formatDate(DateTime? date) {
+    if (date == null) {
+      return 'Неизвестная дата';
+    }
+    final dateFormat = DateFormat('dd.MM.yyyy');
+    return dateFormat.format(date);
+  }
+
+  String _formatTime(DateTime? time) {
+    if (time == null) {
+      return 'Неизвестное время';
+    }
+    final timeFormat = DateFormat('HH:mm');
+    return timeFormat.format(time);
   }
 
   @override
@@ -1657,6 +1572,8 @@ class _FlightBookingScreenState extends State<FlightBookingScreen> {
     super.dispose();
   }
 }
+
+
 
 // Внутренний перевод
 class InternalTransferScreen extends StatefulWidget {
@@ -1922,15 +1839,14 @@ class NotificationCard extends StatelessWidget {
             color: transaction.amount > 0 ? Colors.green : Colors.red,
           ),
         ),
-        title: Text(
-          transaction.typeName,
-          style: const TextStyle(fontWeight: FontWeight.bold),
-        ),
+        title: Text(transaction.typeName ?? 'Неизвестованный тип'),
         subtitle: Text(
-          '${transaction.transactionDate.day}.${transaction.transactionDate.month}.${transaction.transactionDate.year}',
+          transaction.transactionDate != null
+            ? '${transaction.transactionDate.day}.${transaction.transactionDate.month}.${transaction.transactionDate.year}'
+            : 'Неизвестная дата',
         ),
         trailing: Text(
-          '${transaction.amount > 0 ? '+' : ''}${transaction.amount.toStringAsFixed(2)}${transaction.isBonusPayment ? ' бонусов' : ' ${transaction.currency}'}',
+          '${transaction.amount > 0 ? '+' : ''}${transaction.amount.toStringAsFixed(2)}${transaction.isBonusPayment ? ' бонусов' : ''}', // убрал currency
           style: TextStyle(
             color: transaction.amount > 0 ? Colors.green : Colors.red,
             fontWeight: FontWeight.bold,
@@ -2074,8 +1990,8 @@ class _EditNameScreenState extends State<EditNameScreen> {
     final user = Provider.of<UserProvider>(context, listen: false).currentUser;
     if (user != null) {
       _userId = user.userId;
-      _firstNameController.text = user.firstName;
-      _lastNameController.text = user.lastName;
+      _firstNameController.text = user.firstName ?? '';
+      _lastNameController.text = user.lastName ?? '';
     }
   }
 
@@ -2170,7 +2086,7 @@ class _EditPhoneScreenState extends State<EditPhoneScreen> {
     final user = Provider.of<UserProvider>(context, listen: false).currentUser;
     if (user != null) {
       _userId = user.userId;
-      _phoneController.text = user.phoneNumber;
+      _phoneController.text = user.phoneNumber ?? '';
     }
   }
 

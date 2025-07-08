@@ -48,17 +48,27 @@ class _AuthScreenState extends State<AuthScreen> {
         _phoneController.text,
         _passwordController.text,
       );
-      
-      // Загружаем пользователя через провайдер
+
       await Provider.of<UserProvider>(context, listen: false)
         .loadUser(response['user_id'] as int);
-        
+
+      final user = Provider.of<UserProvider>(context, listen: false).currentUser;
+      if (user != null && mounted) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => MainMenuScreen(user: user)),
+        );
+      }
     } catch (e) {
-      _showError('Ошибка входа: ${e.toString()}');
+      if (mounted) {
+        _showError('Ошибка входа: ${e.toString()}');
+      }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }
+
+
 
   Future<void> _register() async {
     if (!_formKey.currentState!.validate()) return;
@@ -73,13 +83,18 @@ class _AuthScreenState extends State<AuthScreen> {
       );
 
       // Автовход после регистрации
-      await _login();
+      if (mounted) {
+        await _login();
+      }
     } catch (e) {
-      _showError('Ошибка регистрации: ${e.toString()}');
+      if (mounted) {
+        _showError('Ошибка регистрации: ${e.toString()}');
+      }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }
+
 
   // Загрузка данных пользователя
   Future<User> _loadUserData(int userId) async {

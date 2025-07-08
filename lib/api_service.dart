@@ -37,20 +37,19 @@ class ApiService {
   }
 
   static Future<void> closeAccount(int accountId) async {
-    try {
-      // Реализация API-запроса для закрытия счета
-      // Пример для HTTP-запроса (адаптируйте под ваш бэкенд)
-      final response = await http.delete(
-        Uri.parse('https://your-api-url/accounts/$accountId'),
-        headers: {'Authorization': 'Bearer your-token'},
-      );
-      if (response.statusCode != 200) {
-        throw Exception('Не удалось закрыть счет');
-      }
-    } catch (e) {
-      throw Exception('Ошибка при закрытии счета: $e');
+    final token = await getToken();
+    final response = await http.post(
+      Uri.parse('$_baseUrl/accounts/$accountId/close'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+    );
+    if (response.statusCode != 200) {
+      throw Exception('Не удалось закрыть счет: ${response.body}');
     }
   }
+
 
   static Future<void> depositToAccount(int? accountId, double amount) async {
     if (accountId == null) {
@@ -96,24 +95,31 @@ class ApiService {
     String firstName,
     String lastName,
     String birthDate,
+    {String userType = 'individual', int? historyType}
   ) async {
+    final Map<String, dynamic> body = {
+      'phone': phone,
+      'password': password,
+      'first_name': firstName,
+      'last_name': lastName,
+      'birth_date': birthDate,
+      'user_type': userType,
+    };
+    if (userType == 'business' && historyType != null) {
+      body['history_type'] = historyType;
+    }
     final response = await http.post(
       Uri.parse('$_baseUrl/register'),
       headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({
-        'phone': phone,
-        'password': password,
-        'first_name': firstName,
-        'last_name': lastName,
-        'birth_date': birthDate,
-      }),
+      body: jsonEncode(body),
     );
     if (response.statusCode == 201) {
       return jsonDecode(response.body);
     } else {
-      throw Exception('Ошибка регистрации: ${response.statusCode}');
+      throw Exception('Ошибка регистрации: ${response.statusCode} ${response.body}');
     }
   }
+
 
   // Получение информации о пользователе
   static Future<User> getUser(int userId) async {
@@ -123,9 +129,11 @@ class ApiService {
         Uri.parse('$_baseUrl/user/$userId'),
         headers: {'Authorization': 'Bearer $token'},
       );
-      
       if (response.statusCode == 200) {
-        final json = jsonDecode(response.body);
+        final dynamic json = jsonDecode(response.body);
+        if (json == null || json is! Map<String, dynamic>) {
+          throw Exception('Пустой или некорректный ответ сервера');
+        }
         return User.fromJson(json);
       } else {
         throw Exception('Failed to load user: ${response.statusCode}');
@@ -136,6 +144,7 @@ class ApiService {
     }
   }
 
+
   // Получение счетов пользователя
   static Future<List<Account>> getUserAccounts(int userId) async {
     final token = await getToken();
@@ -144,32 +153,33 @@ class ApiService {
       headers: {'Authorization': 'Bearer $token'},
     );
     if (response.statusCode == 200) {
-      final List<dynamic> data = jsonDecode(response.body);
-      return data.map((json) => Account.fromJson(json)).toList();
+      final dynamic jsonData = jsonDecode(response.body);
+      if (jsonData == null || jsonData is! List) {
+        return [];
+      }
+      return jsonData.map<Account>((json) {
+        try {
+          return Account.fromJson(json);
+        } catch (e) {
+          print('Ошибка парсинга Account: $e');
+          // Возвращаем дефолтный объект или пропускаем
+          return Account(
+            accountId: 0,
+            accountNumber: 'unknown',
+            userId: 0,
+            typeId: 0,
+            balance: 0.0,
+            openingDate: DateTime.now(),
+            isActive: false,
+            typeName: 'unknown',
+          );
+        }
+      }).toList();
     } else {
       throw Exception('Failed to load accounts: ${response.statusCode}');
     }
   }
 
-  static Future<Account> createAccount(int? userId, int typeId) async {
-    if (userId == null) {
-      throw Exception('User ID is required');
-    }
-    final token = await getToken();
-    final response = await http.post(
-      Uri.parse('$_baseUrl/user/$userId/accounts'),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',
-      },
-      body: jsonEncode({'type_id': typeId}),
-    );
-    if (response.statusCode == 201) {
-      return Account.fromJson(jsonDecode(response.body));
-    } else {
-      throw Exception('Ошибка создания счета: ${response.statusCode}');
-    }
-  }
 
   // Перевод по номеру телефона
   static Future<void> transferByPhone(
@@ -199,6 +209,37 @@ class ApiService {
     }
   }
 
+  static DateTime? parseDate(String? dateStr) {
+  if (dateStr == null || dateStr.isEmpty) return null;
+  try {
+    return DateTime.parse(dateStr);
+  } catch (e) {
+    print('Ошибка парсинга даты: $dateStr, ошибка: $e');
+    return null;
+  }
+}
+
+
+  static Future<Account> createAccount(int? userId, int typeId) async {
+  if (userId == null) {
+    throw Exception('User ID is required');
+  }
+  final token = await getToken();
+  final response = await http.post(
+    Uri.parse('$_baseUrl/user/$userId/accounts'),
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer $token',
+    },
+    body: jsonEncode({'type_id': typeId}),
+  );
+  if (response.statusCode == 201) {
+    return Account.fromJson(jsonDecode(response.body));
+  } else {
+    throw Exception('Ошибка создания счета: ${response.statusCode}');
+  }
+}
+
   // Получение истории транзакций
   static Future<List<Transaction>> getUserTransactions(int userId) async {
     final token = await getToken();
@@ -207,12 +248,31 @@ class ApiService {
       headers: {'Authorization': 'Bearer $token'},
     );
     if (response.statusCode == 200) {
-      final List<dynamic> data = jsonDecode(response.body);
-      return data.map((json) => Transaction.fromJson(json)).toList();
+      final dynamic jsonData = jsonDecode(response.body);
+      if (jsonData == null || jsonData is! List) {
+        return [];
+      }
+      return jsonData.map<Transaction>((json) {
+        try {
+          return Transaction.fromJson(json);
+        } catch (e) {
+          print('Ошибка парсинга Transaction: $e');
+          return Transaction(
+            transactionId: 0,
+            transactionUuid: '',
+            amount: 0.0,
+            transactionDate: DateTime.now(),
+            typeId: 0,
+            isBonusPayment: false,
+            // остальные поля null или дефолт
+          );
+        }
+      }).toList();
     } else {
       throw Exception('Failed to load transactions: ${response.statusCode}');
     }
   }
+
 
   // Получение доступных авиабилетов
   static Future<List<AirTicket>> getFlights() async {
@@ -335,8 +395,8 @@ class ApiService {
   // Метод для изменения пароля
   static Future<void> changePassword(int userId, String oldPassword, String newPassword) async {
     final token = await getToken();
-    final response = await http.put(
-      Uri.parse('$_baseUrl/user/$userId'),
+    final response = await http.post(
+      Uri.parse('$_baseUrl/user/$userId/change-password'),
       headers: {
         'Content-Type': 'application/json',
         'Authorization': 'Bearer $token',
@@ -346,11 +406,12 @@ class ApiService {
         'new_password': newPassword,
       }),
     );
-
     if (response.statusCode != 200) {
-      throw Exception('Ошибка изменения пароля: ${response.statusCode}');
+      final errorData = jsonDecode(response.body);
+      throw Exception(errorData['message'] ?? 'Ошибка изменения пароля');
     }
   }
+
 
   // Метод для обновления имени пользователя
   static Future<void> updateUserName(int userId, String firstName, String lastName) async {
