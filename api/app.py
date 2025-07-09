@@ -803,6 +803,49 @@ def get_all_tickets(current_user):
         conn.close()
 
 
+@app.route('/api/support/chat', methods=['GET'])
+@token_required
+def get_support_chat(current_user):
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute('''
+            SELECT message_id, user_id, employee_id, message_text, send_time, is_read, is_answered, 'user' AS sender_type
+            FROM support_messages
+            WHERE user_id = %s
+            UNION ALL
+            SELECT r.reply_id AS message_id, m.user_id, r.employee_id, r.reply_text AS message_text, r.reply_time AS send_time, m.is_read, m.is_answered, 'support' AS sender_type
+            FROM support_replies r
+            JOIN support_messages m ON r.message_id = m.message_id
+            WHERE m.user_id = %s
+            ORDER BY send_time ASC
+        ''', (current_user['user_id'], current_user['user_id']))
+        messages = cursor.fetchall()
+        return jsonify(messages), 200
+    finally:
+        conn.close()
+
+@app.route('/api/support/chat', methods=['POST'])
+@token_required
+def post_support_message(current_user):
+    data = request.json
+    message_text = data.get('message_text')
+    if not message_text:
+        return jsonify({'message': 'Message text is required'}), 400
+
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            'INSERT INTO support_messages (user_id, employee_id, message_text, is_read, is_answered) VALUES (%s, 0, %s, 0, 0)',
+            (current_user['user_id'], message_text)
+        )
+        conn.commit()
+        return jsonify({'message': 'Message sent'}), 201
+    finally:
+        conn.close()
+
+
 # Ответ на тикет
 @app.route('/api/support/tickets/<int:ticket_id>/reply', methods=['POST'])
 @token_required

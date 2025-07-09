@@ -169,7 +169,9 @@ class ApiService {
             userId: 0,
             typeId: 0,
             balance: 0.0,
-            openingDate: DateTime.now(),
+            openingDate: json['opening_date'] != null && json['opening_date'].toString().isNotEmpty
+              ? DateTime.parse(json['opening_date'])
+              : DateTime.now(), // или null, если поле nullable
             isActive: false,
             typeName: 'unknown',
           );
@@ -261,7 +263,9 @@ class ApiService {
             transactionId: 0,
             transactionUuid: '',
             amount: 0.0,
-            transactionDate: DateTime.now(),
+            transactionDate: json['transaction_date'] != null && json['transaction_date'].toString().isNotEmpty
+                ? DateTime.parse(json['transaction_date'])
+                : DateTime.now(),
             typeId: 0,
             isBonusPayment: false,
             // остальные поля null или дефолт
@@ -307,7 +311,7 @@ class ApiService {
       body: jsonEncode({
         'ticket_id': ticketId,
         'account_id': accountId,
-        'bonus_amount': bonusAmount,
+        'use_bonuses': bonusAmount > 0,
       }),
     );
     if (response.statusCode != 200) {
@@ -315,6 +319,36 @@ class ApiService {
       throw Exception(errorData['error'] ?? 'Ошибка покупки билета');
     }
   }
+
+  static Future<List<SupportMessage>> getSupportChat() async {
+    final token = await getToken();
+    final response = await http.get(
+      Uri.parse('$_baseUrl/support/chat'),
+      headers: {'Authorization': 'Bearer $token'},
+    );
+    if (response.statusCode == 200) {
+      final List<dynamic> data = jsonDecode(response.body);
+      return data.map((json) => SupportMessage.fromJson(json)).toList();
+    } else {
+      throw Exception('Failed to load support chat');
+    }
+  }
+
+  static Future<void> sendSupportMessage(String messageText) async {
+    final token = await getToken();
+    final response = await http.post(
+      Uri.parse('$_baseUrl/support/chat'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: jsonEncode({'message_text': messageText}),
+    );
+    if (response.statusCode != 201) {
+      throw Exception('Failed to send message');
+    }
+  }
+
 
   // Создание тикета поддержки
   static Future<void> createSupportTicket(

@@ -72,18 +72,27 @@ class Account {
   });
 
   factory Account.fromJson(Map<String, dynamic> json) {
+    double parseDouble(dynamic value) {
+      if (value == null) return 0.0;
+      if (value is num) return value.toDouble();
+      if (value is String) return double.tryParse(value) ?? 0.0;
+      return 0.0;
+    }
+
     return Account(
       accountId: json['account_id'] as int,
       accountNumber: json['account_number'] as String,
       userId: json['user_id'] as int,
       typeId: json['type_id'] as int,
-      balance: (json['balance'] is num) ? (json['balance'] as num).toDouble() : 0.0,
+      balance: parseDouble(json['balance']),
       openingDate: DateTime.parse(json['opening_date'] as String),
       isActive: (json['is_active'] == 1),
       typeName: json['type_name'] as String?,
     );
   }
 }
+
+
 
 class Transaction {
   final int transactionId;
@@ -93,7 +102,6 @@ class Transaction {
   final double amount;
   final DateTime transactionDate;
   final int typeId;
-  final String? status;
   final String? recipientPhone;
   final int? categoryId;
   final String? categoryName;
@@ -110,7 +118,6 @@ class Transaction {
     required this.amount,
     required this.transactionDate,
     required this.typeId,
-    this.status,
     this.recipientPhone,
     this.categoryId,
     this.categoryName,
@@ -121,15 +128,21 @@ class Transaction {
   });
 
   factory Transaction.fromJson(Map<String, dynamic> json) {
+    double parseDouble(dynamic value) {
+      if (value == null) return 0.0;
+      if (value is num) return value.toDouble();
+      if (value is String) return double.tryParse(value) ?? 0.0;
+      return 0.0;
+    }
+
     return Transaction(
       transactionId: json['transaction_id'] as int,
       transactionUuid: json['transaction_uuid'] as String,
       fromAccountId: json['from_account_id'] as int?,
       toAccountId: json['to_account_id'] as int?,
-      amount: (json['amount'] is num) ? (json['amount'] as num).toDouble() : 0.0,
+      amount: parseDouble(json['amount']),
       transactionDate: DateTime.parse(json['transaction_date'] as String),
       typeId: json['type_id'] as int,
-      status: json['status'] as String?,
       recipientPhone: json['recipient_phone'] as String?,
       categoryId: json['category_id'] as int?,
       categoryName: json['category_name'] as String?,
@@ -140,6 +153,36 @@ class Transaction {
     );
   }
 }
+
+class SupportMessage {
+  final int messageId;
+  final int userId;
+  final int employeeId;
+  final String messageText;
+  final DateTime sendTime;
+  final String senderType; // 'user' или 'support'
+
+  SupportMessage({
+    required this.messageId,
+    required this.userId,
+    required this.employeeId,
+    required this.messageText,
+    required this.sendTime,
+    required this.senderType,
+  });
+
+  factory SupportMessage.fromJson(Map<String, dynamic> json) {
+    return SupportMessage(
+      messageId: json['message_id'] as int,
+      userId: json['user_id'] as int,
+      employeeId: json['employee_id'] as int? ?? 0,
+      messageText: json['message_text'] as String,
+      sendTime: DateTime.parse(json['send_time'] as String),
+      senderType: json['sender_type'] as String,
+    );
+  }
+}
+
 
 class AirTicket {
   final int ticketId;
@@ -163,13 +206,20 @@ class AirTicket {
   });
 
   factory AirTicket.fromJson(Map<String, dynamic> json) {
+    double parseDouble(dynamic value) {
+      if (value == null) return 0.0;
+      if (value is num) return value.toDouble();
+      if (value is String) return double.tryParse(value) ?? 0.0;
+      return 0.0;
+    }
+
     return AirTicket(
       ticketId: json['ticket_id'] as int,
       departureCity: json['departure_city'] as String,
       arrivalCity: json['arrival_city'] as String,
       departureTime: DateTime.parse(json['departure_time'] as String),
       arrivalTime: DateTime.parse(json['arrival_time'] as String),
-      price: (json['price'] as num).toDouble(),
+      price: parseDouble(json['price']),
       airline: json['airline'] as String?,
       isAvailable: (json['is_available'] == 1),
     );
