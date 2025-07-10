@@ -167,6 +167,7 @@ def login():
             'user_id': user['user_id'],
             'exp': datetime.utcnow() + timedelta(seconds=JWT_EXP_DELTA_SECONDS)
         }, JWT_SECRET, algorithm=JWT_ALGORITHM)
+        print('Loaded user role_id:', user['role_id'])
 
         return jsonify({
             'token': token,
@@ -607,6 +608,31 @@ def change_password(current_user, user_id):
         if conn.is_connected():
             conn.close()
 
+@app.route('/api/admin/user-activity', methods=['GET'])
+@token_required
+def get_user_activity(current_user):
+    if current_user['role_id'] != 3:
+        return jsonify({'message': 'Unauthorized access!'}), 403
+
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute('''
+            SELECT u.user_id, u.first_name, u.last_name,
+                   COUNT(t.transaction_id) AS total_transfers,
+                   COALESCE(SUM(a.balance), 0) AS total_balance,
+                   u.bonus_balance
+            FROM users u
+            LEFT JOIN accounts a ON u.user_id = a.user_id
+            LEFT JOIN transactions t ON a.account_id = t.from_account_id
+            GROUP BY u.user_id
+            ORDER BY u.user_id
+        ''')
+        result = cursor.fetchall()
+        return jsonify(result), 200
+    finally:
+        if conn and conn.is_connected():
+            conn.close()
 
 # Получение бонусного баланса (новый метод)
 @app.route('/api/user/<int:user_id>/bonuses', methods=['GET'])
@@ -735,6 +761,46 @@ def get_flights():
     finally:
         conn.close()
 
+@app.route('/api/support/tickets/<int:ticket_id>', methods=['PUT'])
+@token_required
+def update_ticket(current_user, ticket_id):
+    if current_user['role_id'] not in [2, 3]:  # сотрудник или админ
+        return jsonify({'message': 'Unauthorized access!'}), 403
+
+    data = request.json
+    subject = data.get('subject')
+    reply_text = data.get('reply_text')
+    is_answered = data.get('is_answered')
+
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        query = 'UPDATE support_tickets SET '
+        params = []
+        updates = []
+        if subject is not None:
+            updates.append('subject = %s')
+            params.append(subject)
+        if reply_text is not None:
+            updates.append('reply_text = %s')
+            params.append(reply_text)
+        if is_answered is not None:
+            updates.append('is_answered = %s')
+            params.append(1 if is_answered else 0)
+        updates.append('updated_at = NOW()')
+        query += ', '.join(updates)
+        query += ' WHERE ticket_id = %s'
+        params.append(ticket_id)
+
+        cursor.execute(query, tuple(params))
+        conn.commit()
+        return jsonify({'message': 'Ticket updated'}), 200
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'message': str(e)}), 500
+    finally:
+        if conn and conn.is_connected():
+            conn.close()
 
 
 # Создание тикета в поддержку

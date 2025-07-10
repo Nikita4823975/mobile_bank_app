@@ -120,7 +120,6 @@ class ApiService {
     }
   }
 
-
   // Получение информации о пользователе
   static Future<User> getUser(int userId) async {
     try {
@@ -129,6 +128,8 @@ class ApiService {
         Uri.parse('$_baseUrl/user/$userId'),
         headers: {'Authorization': 'Bearer $token'},
       );
+      print('getUser response status: ${response.statusCode}');
+      print('getUser response body: ${response.body}');
       if (response.statusCode == 200) {
         final dynamic json = jsonDecode(response.body);
         if (json == null || json is! Map<String, dynamic>) {
@@ -143,7 +144,6 @@ class ApiService {
       rethrow;
     }
   }
-
 
   // Получение счетов пользователя
   static Future<List<Account>> getUserAccounts(int userId) async {
@@ -181,6 +181,22 @@ class ApiService {
       throw Exception('Failed to load accounts: ${response.statusCode}');
     }
   }
+
+  static Future<List<UserActivity>> getUserActivity() async {
+  final token = await getToken();
+  final response = await http.get(
+    Uri.parse('$_baseUrl/admin/user-activity'),
+    headers: {'Authorization': 'Bearer $token'},
+  );
+
+  if (response.statusCode == 200) {
+    final List<dynamic> data = jsonDecode(response.body);
+    return data.map((json) => UserActivity.fromJson(json)).toList();
+  } else {
+    throw Exception('Ошибка загрузки активности: ${response.statusCode}');
+  }
+  }
+
 
 
   // Перевод по номеру телефона
@@ -320,6 +336,7 @@ class ApiService {
     }
   }
 
+
   static Future<List<SupportMessage>> getSupportChat() async {
     final token = await getToken();
     final response = await http.get(
@@ -346,6 +363,54 @@ class ApiService {
     );
     if (response.statusCode != 201) {
       throw Exception('Failed to send message');
+    }
+  }
+
+  static Future<List<SupportTicket>> getAllTickets() async {
+  final token = await getToken();
+  final response = await http.get(
+    Uri.parse('$_baseUrl/support/all-tickets'),
+    headers: {'Authorization': 'Bearer $token'},
+  );
+  if (response.statusCode == 200) {
+    final List<dynamic> data = jsonDecode(response.body);
+    return data.map((json) => SupportTicket.fromJson(json)).toList();
+  } else {
+    throw Exception('Ошибка загрузки тикетов: ${response.statusCode}');
+  }
+  }
+
+  static Future<void> updateTicketSubjectAndStatus(int ticketId, String subject, bool isAnswered) async {
+  final token = await getToken();
+  final response = await http.put(
+    Uri.parse('$_baseUrl/support/tickets/$ticketId'),
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer $token',
+    },
+    body: jsonEncode({
+      'subject': subject,
+      'is_answered': isAnswered,
+    }),
+  );
+  if (response.statusCode != 200) {
+    throw Exception('Ошибка обновления тикета: ${response.statusCode}');
+  }
+  }
+
+  static Future<void> replyToTicket(int ticketId, String reply) async {
+    final token = await getToken();
+    final response = await http.post(
+      Uri.parse('$_baseUrl/support/tickets/$ticketId/reply'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: jsonEncode({'reply': reply}),
+    );
+    if (response.statusCode != 200) {
+      final errorData = jsonDecode(response.body);
+      throw Exception(errorData['message'] ?? 'Ошибка отправки ответа на тикет');
     }
   }
 

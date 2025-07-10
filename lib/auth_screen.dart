@@ -49,26 +49,30 @@ class _AuthScreenState extends State<AuthScreen> {
         _passwordController.text,
       );
 
-      await Provider.of<UserProvider>(context, listen: false)
-        .loadUser(response['user_id'] as int);
+      final userProvider = Provider.of<UserProvider>(context, listen: false);
+      final user = await userProvider.loadUser(response['user_id'] as int);
+      print('User roleId after loadUser: ${user?.roleId}');
 
-      final user = Provider.of<UserProvider>(context, listen: false).currentUser;
-      if (user != null && mounted) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => MainMenuScreen(user: user)),
-        );
+      if (!mounted) return;
+
+      if (user == null) {
+        _showError('Не удалось загрузить данные пользователя');
+        return;
+      }
+
+      if (user.roleId == 2) {
+        Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const EmployeeSupportScreen()));
+      } else if (user.roleId == 3) {
+        Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const AdminScreen()));
+      } else {
+        Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => MainMenuScreen(user: user)));
       }
     } catch (e) {
-      if (mounted) {
-        _showError('Ошибка входа: ${e.toString()}');
-      }
+      if (mounted) _showError('Ошибка входа: ${e.toString()}');
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }
-
-
 
   Future<void> _register() async {
     if (!_formKey.currentState!.validate()) return;

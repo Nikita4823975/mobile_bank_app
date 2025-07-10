@@ -1645,13 +1645,14 @@ class _FlightBookingScreenState extends State<FlightBookingScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Билет успешно куплен!')),
       );
-      Navigator.popUntil(context, ModalRoute.withName('/main'));
+      Navigator.popUntil(context, (route) => route.isFirst);
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Ошибка покупки билета: $e')),
       );
     }
   }
+
 
   @override
   Widget build(BuildContext context) {
@@ -1755,7 +1756,319 @@ class _FlightBookingScreenState extends State<FlightBookingScreen> {
   }
 }
 
+class EmployeeSupportScreen extends StatefulWidget {
+  const EmployeeSupportScreen({Key? key}) : super(key: key);
 
+  @override
+  State<EmployeeSupportScreen> createState() => _EmployeeSupportScreenState();
+}
+
+class _EmployeeSupportScreenState extends State<EmployeeSupportScreen> {
+  late Future<List<SupportTicket>> _ticketsFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadTickets();
+  }
+
+  void _loadTickets() {
+    _ticketsFuture = ApiService.getAllTickets(); // Нужно реализовать метод в ApiService
+  }
+
+  void _openTicket(SupportTicket ticket) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => EmployeeTicketDetailScreen(ticket: ticket),
+      ),
+    ).then((_) {
+      // Обновить список после возврата
+      setState(() {
+        _loadTickets();
+      });
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Поддержка клиентов')),
+      body: FutureBuilder<List<SupportTicket>>(
+        future: _ticketsFuture,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (snapshot.hasError) {
+            return Center(child: Text('Ошибка: ${snapshot.error}'));
+          }
+          final tickets = snapshot.data ?? [];
+          if (tickets.isEmpty) {
+            return const Center(child: Text('Нет тикетов'));
+          }
+          return ListView.builder(
+            itemCount: tickets.length,
+            itemBuilder: (context, index) {
+              final ticket = tickets[index];
+              return ListTile(
+                title: Text(ticket.subject),
+                subtitle: Text(
+                  'От: ${ticket.firstName ?? ''} ${ticket.lastName ?? ''}\n${ticket.messageText}',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                trailing: Icon(
+                  ticket.isAnswered ? Icons.check_circle : Icons.pending,
+                  color: ticket.isAnswered ? Colors.green : Colors.orange,
+                ),
+                onTap: () => _openTicket(ticket),
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+}
+
+class EmployeeTicketDetailScreen extends StatefulWidget {
+  final SupportTicket ticket;
+
+  const EmployeeTicketDetailScreen({Key? key, required this.ticket}) : super(key: key);
+
+  @override
+  State<EmployeeTicketDetailScreen> createState() => _EmployeeTicketDetailScreenState();
+}
+
+class _EmployeeTicketDetailScreenState extends State<EmployeeTicketDetailScreen> {
+  late TextEditingController _subjectController;
+  late TextEditingController _replyController;
+  bool _isAnswered = false;
+  bool _isLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _subjectController = TextEditingController(text: widget.ticket.subject);
+    _replyController = TextEditingController(text: widget.ticket.replyText ?? '');
+    _isAnswered = widget.ticket.isAnswered;
+  }
+
+  Future<void> _saveChanges() async {
+    setState(() => _isLoading = true);
+    try {
+      await ApiService.replyToTicket(
+        widget.ticket.ticketId,
+        _replyController.text,
+      );
+      // Обновляем тему и статус тикета через API (нужно реализовать)
+      await ApiService.updateTicketSubjectAndStatus(
+        widget.ticket.ticketId,
+        _subjectController.text,
+        _replyController.text.isNotEmpty,
+      );
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Изменения сохранены')),
+      );
+      Navigator.pop(context);
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Ошибка сохранения: $e')),
+      );
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  @override
+  void dispose() {
+    _subjectController.dispose();
+    _replyController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Детали тикета')),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  TextField(
+                    controller: _subjectController,
+                    decoration: const InputDecoration(labelText: 'Тема'),
+                  ),
+                  const SizedBox(height: 16),
+                  Text('Сообщение клиента:'),
+                  Text(widget.ticket.messageText),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: _replyController,
+                    maxLines: 5,
+                    decoration: const InputDecoration(
+                      labelText: 'Ответ поддержки',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Checkbox(
+                        value: _isAnswered,
+                        onChanged: (val) {
+                          setState(() {
+                            _isAnswered = val ?? false;
+                          });
+                        },
+                      ),
+                      const Text('Тикет обработан'),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+                  ElevatedButton(
+                    onPressed: _saveChanges,
+                    child: const Text('Сохранить'),
+                  ),
+                ],
+              ),
+            ),
+    );
+  }
+}
+
+class AdminScreen extends StatefulWidget {
+  const AdminScreen({Key? key}) : super(key: key);
+
+  @override
+  State<AdminScreen> createState() => _AdminScreenState();
+}
+
+class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStateMixin {
+  late TabController _tabController;
+
+  Future<List<UserActivity>>? _userActivityFuture;
+  Future<List<SupportTicket>>? _allTicketsFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 2, vsync: this);
+    _loadData();
+  }
+
+  void _loadData() {
+    _userActivityFuture = ApiService.getUserActivity();
+    _allTicketsFuture = ApiService.getAllTickets();
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Администратор'),
+        bottom: TabBar(
+          controller: _tabController,
+          tabs: const [
+            Tab(text: 'Активность пользователей'),
+            Tab(text: 'Чаты поддержки'),
+          ],
+        ),
+      ),
+      body: TabBarView(
+        controller: _tabController,
+        children: [
+          _buildUserActivityTab(),
+          _buildSupportChatsTab(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildUserActivityTab() {
+    return FutureBuilder<List<UserActivity>>(
+      future: _userActivityFuture,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        } else if (snapshot.hasError) {
+          return Center(child: Text('Ошибка загрузки активности: ${snapshot.error}'));
+        } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
+          return const Center(child: Text('Активность не найдена'));
+        }
+
+        final activities = snapshot.data!;
+        return ListView.separated(
+          itemCount: activities.length,
+          separatorBuilder: (_, __) => const Divider(),
+          itemBuilder: (context, index) {
+            final activity = activities[index];
+            return ListTile(
+              title: Text('${activity.firstName} ${activity.lastName}'),
+              subtitle: Text('Всего транзакций: ${activity.totalTransactions}, Баланс: ${activity.totalBalance.toStringAsFixed(2)}'),
+              trailing: Text('Кэшбэк: ${activity.bonusBalance.toStringAsFixed(2)}'),
+              onTap: () {
+                // Можно добавить детали активности, если нужно
+              },
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildSupportChatsTab() {
+    return FutureBuilder<List<SupportTicket>>(
+      future: _allTicketsFuture,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        } else if (snapshot.hasError) {
+          return Center(child: Text('Ошибка загрузки тикетов: ${snapshot.error}'));
+        } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
+          return const Center(child: Text('Тикеты не найдены'));
+        }
+
+        final tickets = snapshot.data!;
+        return ListView.separated(
+          itemCount: tickets.length,
+          separatorBuilder: (_, __) => const Divider(),
+          itemBuilder: (context, index) {
+            final ticket = tickets[index];
+            return ListTile(
+              title: Text(ticket.subject),
+              subtitle: Text('От: ${ticket.firstName ?? ''} ${ticket.lastName ?? ''}\n${ticket.messageText}'),
+              trailing: Icon(
+                ticket.isAnswered ? Icons.check_circle : Icons.pending,
+                color: ticket.isAnswered ? Colors.green : Colors.orange,
+              ),
+              onTap: () {
+                // Открыть детали тикета (можно переиспользовать EmployeeTicketDetailScreen)
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => EmployeeTicketDetailScreen(ticket: ticket),
+                  ),
+                );
+              },
+            );
+          },
+        );
+      },
+    );
+  }
+}
 
 // Внутренний перевод
 class InternalTransferScreen extends StatefulWidget {

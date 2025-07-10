@@ -26,23 +26,13 @@ class UserProvider with ChangeNotifier {
   User? get currentUser => _currentUser;
   bool get isLoading => _isLoading;
 
-  Future<void> setUser(User user) async {
-    _currentUser = user;
-    notifyListeners();
-  }
-
-  Future<void> clearUser() async {
-    _currentUser = null;
-    notifyListeners();
-  }
-
-  Future<void> loadUser(int userId) async {
+  Future<User?> loadUser(int userId) async {
     _isLoading = true;
     notifyListeners();
-    
     try {
       final user = await ApiService.getUser(userId);
       _currentUser = user;
+      return user;
     } catch (e) {
       _currentUser = null;
       rethrow;
@@ -51,7 +41,14 @@ class UserProvider with ChangeNotifier {
       notifyListeners();
     }
   }
+
+
+  Future<void> clearUser() async {
+    _currentUser = null;
+    notifyListeners();
+  }
 }
+
 
 class AviaBankApp extends StatelessWidget {
   const AviaBankApp({super.key});
@@ -61,35 +58,35 @@ class AviaBankApp extends StatelessWidget {
     return MaterialApp(
       scaffoldMessengerKey: rootScaffoldMessengerKey,
       title: 'Авиа-Банк',
-        supportedLocales: const [
-          Locale('ru'), // русский
-          Locale('en'), // английский, если нужен
-        ],
-        localizationsDelegates: const [
-          GlobalMaterialLocalizations.delegate,
-          GlobalWidgetsLocalizations.delegate,
-          GlobalCupertinoLocalizations.delegate,
-        ],
-  locale: const Locale('ru'), // по умолчанию русский
+      supportedLocales: const [
+        Locale('ru'),
+        Locale('en'),
+      ],
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      locale: const Locale('ru'),
       theme: ThemeData(
         primarySwatch: Colors.blue,
         visualDensity: VisualDensity.adaptivePlatformDensity,
       ),
       home: Consumer<UserProvider>(
         builder: (context, userProvider, child) {
-          // Если пользователь загружается, показываем индикатор
           if (userProvider.isLoading) {
-            return const Scaffold(
-              body: Center(child: CircularProgressIndicator()),
-            );
+            return const Scaffold(body: Center(child: CircularProgressIndicator()));
           }
-          
-          // Показываем главное меню если пользователь авторизован
-          if (userProvider.currentUser != null) {
-            return MainMenuScreen(user: userProvider.currentUser!);
+          final user = userProvider.currentUser;
+          if (user != null) {
+            if (user.roleId == 2) {
+              return const EmployeeSupportScreen();
+            } else if (user.roleId == 3) {
+              return const AdminScreen();
+            } else {
+              return MainMenuScreen(user: user);
+            }
           }
-          
-          // Иначе показываем экран авторизации
           return const AuthScreen();
         },
       ),

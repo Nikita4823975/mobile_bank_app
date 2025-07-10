@@ -50,6 +50,53 @@ class User {
       };
 }
 
+class UserActivity {
+  final int userId;
+  final String firstName;
+  final String lastName;
+  final int totalTransactions;
+  final double totalBalance;
+  final double bonusBalance;
+
+  UserActivity({
+    required this.userId,
+    required this.firstName,
+    required this.lastName,
+    required this.totalTransactions,
+    required this.totalBalance,
+    required this.bonusBalance,
+  });
+
+  factory UserActivity.fromJson(Map<String, dynamic> json) {
+    int parseInt(dynamic value) {
+      if (value == null) return 0;
+      if (value is int) return value;
+      if (value is double) return value.toInt();
+      if (value is String) return int.tryParse(value) ?? 0;
+      return 0;
+    }
+
+    double parseDouble(dynamic value) {
+      if (value == null) return 0.0;
+      if (value is double) return value;
+      if (value is int) return value.toDouble();
+      if (value is String) return double.tryParse(value) ?? 0.0;
+      return 0.0;
+    }
+
+    return UserActivity(
+      userId: parseInt(json['user_id']),
+      firstName: json['first_name'] as String? ?? '',
+      lastName: json['last_name'] as String? ?? '',
+      totalTransactions: parseInt(json['total_transfers']),
+      totalBalance: parseDouble(json['total_balance']),
+      bonusBalance: parseDouble(json['bonus_balance']),
+    );
+  }
+}
+
+
+
 class Account {
   final int accountId;
   final String accountNumber;
