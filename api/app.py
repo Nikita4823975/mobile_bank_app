@@ -11,6 +11,7 @@ import os
 import jwt
 import uuid
 from datetime import datetime, timedelta
+from decimal import Decimal
 
 # Конфигурация JWT
 JWT_SECRET = 'your_very_strong_secret_key_here'
@@ -665,7 +666,7 @@ def book_flight(current_user):
         bonus_amount = 0
         
         if use_bonuses:
-            max_bonus = min(ticket['price'] * 0.5, bonus_balance)
+            max_bonus = min(ticket['price'] * Decimal('0.5'), bonus_balance)
             bonus_amount = min(max_bonus, bonus_balance)
             cash_amount -= bonus_amount
         

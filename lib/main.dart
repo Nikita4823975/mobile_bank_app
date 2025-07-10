@@ -4,6 +4,7 @@ import 'auth_screen.dart';
 import 'main_menu.dart';
 import 'api_service.dart';
 import 'models.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 
 // Глобальный ключ для SnackBar
 final GlobalKey<ScaffoldMessengerState> rootScaffoldMessengerKey = GlobalKey();
@@ -60,6 +61,16 @@ class AviaBankApp extends StatelessWidget {
     return MaterialApp(
       scaffoldMessengerKey: rootScaffoldMessengerKey,
       title: 'Авиа-Банк',
+        supportedLocales: const [
+          Locale('ru'), // русский
+          Locale('en'), // английский, если нужен
+        ],
+        localizationsDelegates: const [
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+  locale: const Locale('ru'), // по умолчанию русский
       theme: ThemeData(
         primarySwatch: Colors.blue,
         visualDensity: VisualDensity.adaptivePlatformDensity,

@@ -1,5 +1,5 @@
 name: mobile_bank_app
-description: "A new Flutter project."
+description: "Mobile bank app"
 
 version: 1.0.0+1
 
@@ -7,13 +7,15 @@ environment:
   sdk: ^3.8.0
 
 dependencies:
+  flutter_localizations:
+    sdk: flutter
   flutter:
     sdk: flutter
-  mysql1: ^0.20.0   # изменено с 0.22.0 на 0.20.0
-  http: ^1.4.0       # изменено с 0.15.0 на 1.4.0
+  mysql1: ^0.20.0  
+  http: ^1.4.0     
   shared_preferences: ^2.2.2
   flutter_secure_storage: ^9.2.4
-  intl: ^0.18.1
+  intl: ^0.20.2
   provider: ^6.1.5
   jwt_decoder: ^2.0.1
   

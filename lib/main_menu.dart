@@ -936,8 +936,9 @@ class TransactionHistoryScreen extends StatefulWidget {
 }
 
 class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
-  Future<List<Transaction>> _transactionsFuture = Future.value([]);
+  Future<List<TransactionWithDirection>>? _transactionsWithDirectionFuture;
   int? _userId;
+  List<Account> _userAccounts = [];
 
   @override
   void didChangeDependencies() {
@@ -945,30 +946,43 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
     final user = Provider.of<UserProvider>(context, listen: false).currentUser;
     if (user != null) {
       _userId = user.userId;
-      if (_userId != null) {
-        _transactionsFuture = ApiService.getUserTransactions(_userId!);
-      } else {
-        _transactionsFuture = Future.value([]);
-      }
+      _loadAccountsAndTransactions();
+    }
+  }
+
+  Future<void> _loadAccountsAndTransactions() async {
+    if (_userId == null) return;
+
+    try {
+      // Загружаем счета
+      _userAccounts = await ApiService.getUserAccounts(_userId!);
+      final userAccountIds = _userAccounts.map((a) => a.accountId).toSet();
+
+      // Загружаем транзакции
+      final transactions = await ApiService.getUserTransactions(_userId!);
+
+      // Формируем список с флагом isOutgoing
+      final decoratedTransactions = transactions.map((tr) {
+        final isOutgoing = userAccountIds.contains(tr.fromAccountId);
+        return TransactionWithDirection(transaction: tr, isOutgoing: isOutgoing);
+      }).toList();
+
+      setState(() {
+        _transactionsWithDirectionFuture = Future.value(decoratedTransactions);
+      });
+    } catch (e) {
+      setState(() {
+        _transactionsWithDirectionFuture = Future.error(e);
+      });
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('История транзакций'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.filter_alt),
-            onPressed: () {
-              // Фильтрация транзакций
-            },
-          ),
-        ],
-      ),
-      body: FutureBuilder<List<Transaction>>(
-        future: _transactionsFuture,
+      appBar: AppBar(title: const Text('История транзакций')),
+      body: FutureBuilder<List<TransactionWithDirection>>(
+        future: _transactionsWithDirectionFuture,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
@@ -978,12 +992,15 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
             return const Center(child: Text('Транзакции не найдены'));
           }
 
-          final transactions = snapshot.data!;
+          final transactionsWithDirection = snapshot.data!;
           return ListView.builder(
-            itemCount: transactions.length,
+            itemCount: transactionsWithDirection.length,
             itemBuilder: (context, index) {
-              final transaction = transactions[index];
-              return TransactionCard(transaction: transaction);
+              final trWithDir = transactionsWithDirection[index];
+              return TransactionCard(
+                transaction: trWithDir.transaction,
+                isOutgoing: trWithDir.isOutgoing,
+              );
             },
           );
         },
@@ -992,13 +1009,22 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
   }
 }
 
+
 class TransactionCard extends StatelessWidget {
   final Transaction transaction;
+  final bool isOutgoing; // true если расход
 
-  const TransactionCard({super.key, required this.transaction});
+  const TransactionCard({
+    super.key,
+    required this.transaction,
+    required this.isOutgoing,
+  });
 
   @override
   Widget build(BuildContext context) {
+    final color = isOutgoing ? Colors.red : Colors.green;
+    final icon = isOutgoing ? Icons.arrow_upward : Icons.arrow_downward;
+
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: ListTile(
@@ -1006,24 +1032,21 @@ class TransactionCard extends StatelessWidget {
           width: 40,
           height: 40,
           decoration: BoxDecoration(
-            color: transaction.amount > 0 ? Colors.green[100] : Colors.red[100],
+            color: color.withOpacity(0.2),
             borderRadius: BorderRadius.circular(20),
           ),
-          child: Icon(
-            transaction.amount > 0 ? Icons.arrow_downward : Icons.arrow_upward,
-            color: transaction.amount > 0 ? Colors.green : Colors.red,
-          ),
+          child: Icon(icon, color: color),
         ),
-        title: Text(transaction.typeName ?? 'Неизвестованный тип'),
+        title: Text(transaction.categoryName ?? 'Неизвестованная категория'),
         subtitle: Text(
           transaction.transactionDate != null
-            ? '${transaction.transactionDate.day}.${transaction.transactionDate.month}.${transaction.transactionDate.year}'
-            : 'Неизвестная дата',
+              ? '${transaction.transactionDate.day}.${transaction.transactionDate.month}.${transaction.transactionDate.year}'
+              : 'Неизвестная дата',
         ),
         trailing: Text(
-          '${transaction.amount > 0 ? '+' : ''}${transaction.amount.toStringAsFixed(2)}${transaction.isBonusPayment ? ' бонусов' : ''}', // убрал currency
+          '${isOutgoing ? '-' : '+'}${transaction.amount.toStringAsFixed(2)}${transaction.isBonusPayment ? ' бонусов' : ''}',
           style: TextStyle(
-            color: transaction.amount > 0 ? Colors.green : Colors.red,
+            color: color,
             fontWeight: FontWeight.bold,
           ),
         ),
@@ -1033,6 +1056,17 @@ class TransactionCard extends StatelessWidget {
       ),
     );
   }
+}
+
+
+class TransactionWithDirection {
+  final Transaction transaction;
+  final bool isOutgoing;
+
+  TransactionWithDirection({
+    required this.transaction,
+    required this.isOutgoing,
+  });
 }
 
 // Кэшбэк
